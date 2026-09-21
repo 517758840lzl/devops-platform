@@ -66,7 +66,7 @@
       <el-table-column label="操作人" width="120">
         <template #default="{ row }">{{ row.user_name || `#${row.user_id}` }}</template>
       </el-table-column>
-      <el-table-column label="对象" width="120">
+      <el-table-column label="对象" min-width="260" show-overflow-tooltip>
         <template #default="{ row }">{{ formatActivityTarget(row) }}</template>
       </el-table-column>
       <el-table-column label="操作" min-width="280">

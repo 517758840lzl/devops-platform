@@ -23,7 +23,10 @@ func NewActivityHandler(db *gorm.DB) *ActivityHandler {
 
 type activityVO struct {
 	model.ActivityLog
-	UserName string `json:"user_name"`
+	UserName    string `json:"user_name"`
+	TargetLabel string `json:"target_label"`
+	ProjectName string `json:"project_name"`
+	ProjectCode string `json:"project_code"`
 }
 
 func (h *ActivityHandler) List(c *gin.Context) {
@@ -127,6 +130,10 @@ func (h *ActivityHandler) List(c *gin.Context) {
 	}
 
 	userCache := map[uint]string{}
+	projectCache := map[uint]model.Project{}
+	issueCache := map[uint]model.Issue{}
+	releaseCache := map[uint]model.Release{}
+
 	result := make([]activityVO, 0, len(logs))
 	for _, log := range logs {
 		name, ok := userCache[log.UserID]
@@ -139,9 +146,131 @@ func (h *ActivityHandler) List(c *gin.Context) {
 			}
 			userCache[log.UserID] = name
 		}
-		result = append(result, activityVO{ActivityLog: log, UserName: name})
+
+		vo := activityVO{ActivityLog: log, UserName: name}
+		pid := log.ProjectID
+		if pid == 0 {
+			pid = service.ResolveActivityProjectID(h.db, log.TargetType, log.TargetID)
+		}
+		if pid > 0 {
+			proj, ok := projectCache[pid]
+			if !ok {
+				h.db.Select("id, code, name").First(&proj, pid)
+				projectCache[pid] = proj
+			}
+			vo.ProjectName = proj.Name
+			vo.ProjectCode = proj.Code
+		}
+		vo.TargetLabel = h.resolveTargetLabel(log, projectCache, issueCache, releaseCache)
+		result = append(result, vo)
 	}
 	response.OK(c, result)
+}
+
+func (h *ActivityHandler) resolveTargetLabel(
+	log model.ActivityLog,
+	projectCache map[uint]model.Project,
+	issueCache map[uint]model.Issue,
+	releaseCache map[uint]model.Release,
+) string {
+	switch log.TargetType {
+	case "project":
+		proj, ok := projectCache[log.TargetID]
+		if !ok {
+			h.db.Select("id, code, name").First(&proj, log.TargetID)
+			projectCache[log.TargetID] = proj
+		}
+		if proj.Name != "" && proj.Code != "" {
+			return proj.Name + "（" + proj.Code + "）"
+		}
+		if proj.Name != "" {
+			return proj.Name
+		}
+		if proj.Code != "" {
+			return proj.Code
+		}
+		return "项目 #" + strconv.FormatUint(uint64(log.TargetID), 10)
+	case "issue":
+		issue, ok := issueCache[log.TargetID]
+		if !ok {
+			h.db.Select("id, title, type, project_id").First(&issue, log.TargetID)
+			issueCache[log.TargetID] = issue
+		}
+		prefix := "任务"
+		if issue.Type == "bug" || issue.Type == "" {
+			prefix = "Bug"
+		}
+		var title string
+		if issue.Title != "" {
+			title = prefix + "：" + issue.Title
+		} else {
+			title = prefix + " #" + strconv.FormatUint(uint64(log.TargetID), 10)
+		}
+		return withProjectPrefix(h, log, projectCache, title)
+	case "release":
+		rel, ok := releaseCache[log.TargetID]
+		if !ok {
+			h.db.Select("id, version, title, project_id").First(&rel, log.TargetID)
+			releaseCache[log.TargetID] = rel
+		}
+		var title string
+		if rel.Version != "" {
+			if rel.Title != "" {
+				title = "发布 " + rel.Version + "（" + rel.Title + "）"
+			} else {
+				title = "发布 " + rel.Version
+			}
+		} else {
+			title = "发布 #" + strconv.FormatUint(uint64(log.TargetID), 10)
+		}
+		return withProjectPrefix(h, log, projectCache, title)
+	case "requirement":
+		var req model.Requirement
+		h.db.Select("id, title, project_id").First(&req, log.TargetID)
+		var title string
+		if req.Title != "" {
+			title = "需求：" + req.Title
+		} else {
+			title = "需求 #" + strconv.FormatUint(uint64(log.TargetID), 10)
+		}
+		return withProjectPrefix(h, log, projectCache, title)
+	default:
+		if log.TargetID > 0 {
+			return withProjectPrefix(h, log, projectCache, log.TargetType+" #"+strconv.FormatUint(uint64(log.TargetID), 10))
+		}
+		return log.TargetType
+	}
+}
+
+func withProjectPrefix(
+	h *ActivityHandler,
+	log model.ActivityLog,
+	projectCache map[uint]model.Project,
+	label string,
+) string {
+	pid := log.ProjectID
+	if pid == 0 {
+		pid = service.ResolveActivityProjectID(h.db, log.TargetType, log.TargetID)
+	}
+	if pid == 0 {
+		return label
+	}
+	proj, ok := projectCache[pid]
+	if !ok {
+		h.db.Select("id, code, name").First(&proj, pid)
+		projectCache[pid] = proj
+	}
+	name := proj.Name
+	if name == "" {
+		name = proj.Code
+	}
+	if name == "" {
+		return label
+	}
+	if proj.Code != "" && proj.Name != "" {
+		return proj.Name + "（" + proj.Code + "）· " + label
+	}
+	return name + " · " + label
 }
 
 func actionGroupActions(group string) []string {

@@ -36,6 +36,7 @@ function formatProgressUpdate(a) {
 
 export function formatActivityTarget(a) {
   if (!a) return '-'
+  if (a.target_label) return a.target_label
   const typeMap = {
     project: '项目',
     issue: 'Bug/任务',
@@ -43,6 +44,10 @@ export function formatActivityTarget(a) {
     requirement: '需求',
   }
   const type = typeMap[a.target_type] || a.target_type || '-'
+  if (a.target_type === 'project' && (a.project_name || a.project_code)) {
+    if (a.project_name && a.project_code) return `${a.project_name}（${a.project_code}）`
+    return a.project_name || a.project_code
+  }
   return a.target_id ? `${type} #${a.target_id}` : type
 }
 

@@ -6,7 +6,7 @@ import (
 	"gorm.io/gorm"
 )
 
-func resolveActivityProjectID(db *gorm.DB, targetType string, targetID uint) uint {
+func ResolveActivityProjectID(db *gorm.DB, targetType string, targetID uint) uint {
 	switch targetType {
 	case "project":
 		return targetID
@@ -31,7 +31,7 @@ func resolveActivityProjectID(db *gorm.DB, targetType string, targetID uint) uin
 
 func LogActivity(db *gorm.DB, targetType string, targetID, userID uint, action, oldValue, newValue string) {
 	_ = db.Create(&model.ActivityLog{
-		ProjectID:  resolveActivityProjectID(db, targetType, targetID),
+		ProjectID:  ResolveActivityProjectID(db, targetType, targetID),
 		TargetType: targetType,
 		TargetID:   targetID,
 		UserID:     userID,
