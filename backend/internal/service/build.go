@@ -143,6 +143,9 @@ func RunBuildJob(db *gorm.DB, cfg config.Config, jobID uint) {
 	finished := time.Now()
 	job.FinishedAt = &finished
 	copied := copyBuildArtifacts(project, job, buildDir, outputDir, project.BuildPlatform, appendLog)
+	if n := countArtifactsInDir(outputDir); n > 0 {
+		copied = n
+	}
 
 	job.Status = "success"
 	job.ArtifactPath = outputDir
@@ -167,8 +170,19 @@ func RunBuildJob(db *gorm.DB, cfg config.Config, jobID uint) {
 func copyBuildArtifacts(project model.Project, job model.BuildJob, buildDir, outputDir, platform string, appendLog func(string)) int {
 	candidates := artifactCandidates(buildDir, platform)
 	count := 0
+	gotRelease, gotDebug := false, false
 	for _, src := range candidates {
 		if _, err := os.Stat(src); err != nil {
+			continue
+		}
+		base := strings.ToLower(filepath.Base(src))
+		isDebug := strings.Contains(base, "debug")
+		if isDebug {
+			if gotDebug {
+				continue
+			}
+		} else if gotRelease {
+			// flutter-apk 与 apk/release 常是同一包，只留一份
 			continue
 		}
 		// 磁盘文件名与下载名统一：Easy_Money_release_20260921_195122.apk
@@ -180,8 +194,21 @@ func copyBuildArtifacts(project model.Project, job model.BuildJob, buildDir, out
 		}
 		appendLog("产物: " + dst)
 		count++
+		if isDebug {
+			gotDebug = true
+		} else {
+			gotRelease = true
+		}
 	}
 	return count
+}
+
+func countArtifactsInDir(dir string) int {
+	files, err := CollectArtifactFiles(dir)
+	if err != nil {
+		return 0
+	}
+	return len(files)
 }
 
 func artifactCandidates(buildDir, platform string) []string {
@@ -256,53 +283,69 @@ func CollectArtifactFiles(artifactPath string) ([]ArtifactFile, error) {
 }
 
 func ResolveBuildArtifacts(db *gorm.DB, job model.BuildJob) ([]ArtifactFile, error) {
-	candidateDirs := []string{}
-	if strings.TrimSpace(job.ArtifactPath) != "" {
-		candidateDirs = append(candidateDirs, job.ArtifactPath)
+	// 优先只读正式产物目录；勿再扫工作区 flutter 输出，否则同一 APK 会以不同文件名出现两次
+	var dirs []string
+	if p := strings.TrimSpace(job.ArtifactPath); p != "" {
+		dirs = append(dirs, p)
 	}
 	var project model.Project
 	if err := db.First(&project, job.ProjectID).Error; err == nil {
-		candidateDirs = append(candidateDirs, BuildArtifactDir(project, job))
-		// 兼容旧版：目录曾用数据库 id 命名
+		dirs = append(dirs, BuildArtifactDir(project, job))
 		if job.BuildNumber > 0 && job.BuildNumber != job.ID {
-			legacy := filepath.Join(ResolveArtifactBaseDir(project), fmt.Sprintf("build_%d", job.ID))
-			candidateDirs = append(candidateDirs, legacy)
+			dirs = append(dirs, filepath.Join(ResolveArtifactBaseDir(project), fmt.Sprintf("build_%d", job.ID)))
 		}
 	}
+
+	if merged := mergeArtifactDirs(dirs); len(merged) > 0 {
+		return merged, nil
+	}
+
+	// 兜底：正式目录空时才扫工作区原始输出
 	workspaceRoot := JobWorkspaceDir("data/workspaces", job)
-	candidateDirs = append(candidateDirs,
+	fallback := []string{
 		filepath.Join(workspaceRoot, "build/app/outputs/flutter-apk"),
 		filepath.Join(workspaceRoot, "build/app/outputs/apk/release"),
 		filepath.Join(workspaceRoot, "build/app/outputs/apk/debug"),
-	)
+	}
 	if job.BuildNumber > 0 && job.BuildNumber != job.ID {
 		legacyWS := filepath.Join("data", "workspaces", fmt.Sprintf("project_%d", job.ProjectID), fmt.Sprintf("build_%d", job.ID))
-		candidateDirs = append(candidateDirs,
+		fallback = append(fallback,
 			filepath.Join(legacyWS, "build/app/outputs/flutter-apk"),
 			filepath.Join(legacyWS, "build/app/outputs/apk/release"),
 			filepath.Join(legacyWS, "build/app/outputs/apk/debug"),
 		)
 	}
+	if merged := mergeArtifactDirs(fallback); len(merged) > 0 {
+		return merged, nil
+	}
+	return nil, fmt.Errorf("no artifacts")
+}
 
-	seen := map[string]bool{}
+func mergeArtifactDirs(dirs []string) []ArtifactFile {
+	seenName := map[string]bool{}
+	seenSize := map[int64]bool{}
 	var merged []ArtifactFile
-	for _, dir := range candidateDirs {
+	for _, dir := range dirs {
 		files, err := CollectArtifactFiles(dir)
 		if err != nil || len(files) == 0 {
 			continue
 		}
 		for _, f := range files {
-			if seen[f.Name] {
+			if seenName[f.Name] {
 				continue
 			}
-			seen[f.Name] = true
+			// 同大小视为同一包（flutter-apk 与 apk/release 重复）
+			if f.Size > 0 && seenSize[f.Size] {
+				continue
+			}
+			seenName[f.Name] = true
+			if f.Size > 0 {
+				seenSize[f.Size] = true
+			}
 			merged = append(merged, f)
 		}
 	}
-	if len(merged) == 0 {
-		return nil, fmt.Errorf("no artifacts")
-	}
-	return merged, nil
+	return merged
 }
 
 func copyPath(src, dst string) error {

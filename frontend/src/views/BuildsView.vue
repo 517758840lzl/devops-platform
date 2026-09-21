@@ -186,50 +186,65 @@
       </el-table-column>
     </el-table>
 
-    <el-drawer v-model="detailVisible" title="构建日志" size="640px">
+    <el-drawer
+      v-model="detailVisible"
+      title="构建日志"
+      size="640px"
+      class="build-log-drawer"
+      destroy-on-close
+    >
       <template v-if="current">
-        <el-descriptions :column="2" border size="small">
-          <el-descriptions-item label="状态">
-            <el-tag :type="buildStatusType(current.status)" size="small">{{ buildStatusLabel(current.status) }}</el-tag>
-          </el-descriptions-item>
-          <el-descriptions-item label="分支">{{ current.branch }}</el-descriptions-item>
-          <el-descriptions-item label="Commit" :span="2">{{ current.commit_sha || '-' }}</el-descriptions-item>
-          <el-descriptions-item label="仓库" :span="2">{{ current.git_url }}</el-descriptions-item>
-          <el-descriptions-item v-if="current.artifact_path" label="产物目录" :span="2">{{ current.artifact_path }}</el-descriptions-item>
-        </el-descriptions>
-        <div v-if="current.status === 'success' && current.artifacts_deleted" class="artifact-actions">
-          <span class="artifact-deleted">产物已删除</span>
-        </div>
-        <div v-else-if="current.status === 'success' && artifactFiles.length" class="artifact-list">
-          <div class="section-title">构建产物</div>
-          <div v-for="f in artifactFiles" :key="f.path" class="artifact-row">
-            <span class="artifact-name">{{ f.download_name || f.name }}</span>
-            <span class="artifact-size">{{ formatSize(f.size) }}</span>
+        <div class="drawer-stack">
+          <el-descriptions :column="2" border size="small">
+            <el-descriptions-item label="状态">
+              <el-tag :type="buildStatusType(current.status)" size="small">{{ buildStatusLabel(current.status) }}</el-tag>
+            </el-descriptions-item>
+            <el-descriptions-item label="分支">{{ current.branch }}</el-descriptions-item>
+            <el-descriptions-item label="Commit" :span="2">{{ current.commit_sha || '-' }}</el-descriptions-item>
+            <el-descriptions-item label="仓库" :span="2">{{ current.git_url }}</el-descriptions-item>
+            <el-descriptions-item v-if="current.artifact_path" label="产物目录" :span="2">{{ current.artifact_path }}</el-descriptions-item>
+          </el-descriptions>
+          <div v-if="current.status === 'success' && current.artifacts_deleted" class="artifact-actions">
+            <span class="artifact-deleted">产物已删除</span>
           </div>
-        </div>
-        <div v-if="current.status === 'success' && current.artifact_path && !current.artifacts_deleted" class="artifact-actions">
+          <div v-else-if="current.status === 'success' && artifactFiles.length" class="artifact-list">
+            <div class="section-title">构建产物</div>
+            <div v-for="f in artifactFiles" :key="f.path" class="artifact-row">
+              <span class="artifact-name">{{ f.download_name || f.name }}</span>
+              <span class="artifact-size">{{ formatSize(f.size) }}</span>
+            </div>
+          </div>
+          <div v-if="current.status === 'success' && current.artifact_path && !current.artifacts_deleted" class="artifact-actions">
+            <el-button
+              type="primary"
+              plain
+              size="small"
+              :loading="downloadingId === current.id"
+              :disabled="downloadingId !== null && downloadingId !== current.id"
+              @click="downloadArtifacts(current.id)"
+            >
+              {{ downloadButtonLabel }}
+            </el-button>
+            <el-button
+              type="danger"
+              plain
+              size="small"
+              :loading="deletingId === current.id"
+              @click="deleteArtifacts(current)"
+            >
+              删除产物
+            </el-button>
+          </div>
+          <pre class="log">{{ current.log || '等待日志...' }}</pre>
           <el-button
-            type="primary"
-            plain
+            v-if="current.status === 'running' || current.status === 'pending'"
             size="small"
-            :loading="downloadingId === current.id"
-            :disabled="downloadingId !== null && downloadingId !== current.id"
-            @click="downloadArtifacts(current.id)"
+            class="log-refresh"
+            @click="refreshDetail"
           >
-            {{ downloadButtonLabel }}
-          </el-button>
-          <el-button
-            type="danger"
-            plain
-            size="small"
-            :loading="deletingId === current.id"
-            @click="deleteArtifacts(current)"
-          >
-            删除产物
+            手动刷新日志
           </el-button>
         </div>
-        <pre class="log">{{ current.log || '等待日志...' }}</pre>
-        <el-button v-if="current.status === 'running' || current.status === 'pending'" size="small" @click="refreshDetail">手动刷新日志</el-button>
       </template>
     </el-drawer>
   </div>
@@ -678,8 +693,17 @@ async function loadArtifactFiles(buildId) {
 .artifact-row { display: flex; justify-content: space-between; gap: 12px; font-size: 13px; padding: 6px 0; border-bottom: 1px solid #f0f2f5; }
 .artifact-name { color: #303133; word-break: break-all; }
 .artifact-size { color: #909399; flex-shrink: 0; }
-.artifact-actions { margin-top: 12px; display: flex; gap: 8px; align-items: center; }
+.artifact-actions { margin-top: 12px; display: flex; gap: 8px; align-items: center; flex-shrink: 0; }
 .artifact-deleted { color: #c0c4cc; font-size: 13px; cursor: not-allowed; user-select: none; }
+.drawer-stack {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  gap: 0;
+}
+.drawer-stack :deep(.el-descriptions) { flex-shrink: 0; }
+.artifact-list { flex-shrink: 0; }
 .log {
   margin-top: 16px;
   background: #1e1e1e;
@@ -688,11 +712,13 @@ async function loadArtifactFiles(buildId) {
   border-radius: 6px;
   font-size: 12px;
   line-height: 1.5;
-  max-height: 480px;
+  flex: 1 1 auto;
+  min-height: 120px;
   overflow: auto;
   white-space: pre-wrap;
   word-break: break-all;
 }
+.log-refresh { margin-top: 12px; flex-shrink: 0; align-self: flex-start; }
 </style>
 
 <style>
@@ -701,5 +727,17 @@ async function loadArtifactFiles(buildId) {
 }
 .build-dialog .el-dialog__footer {
   padding: 12px 20px 20px;
+}
+.build-log-drawer.el-drawer {
+  display: flex;
+  flex-direction: column;
+}
+.build-log-drawer .el-drawer__body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding-bottom: 16px;
 }
 </style>
