@@ -32,6 +32,7 @@ func RunBuildJob(db *gorm.DB, cfg config.Config, jobID uint) {
 	job.StartedAt = &now
 	job.Log = "开始构建...\n"
 	db.Save(&job)
+	PublishBuildEvent(job)
 
 	var logBuf bytes.Buffer
 	appendLog := func(s string) {
@@ -154,6 +155,7 @@ func RunBuildJob(db *gorm.DB, cfg config.Config, jobID uint) {
 		job.Log = logBuf.String() + fmt.Sprintf("\n产物目录: %s（未找到标准 APK/IPA 路径，请检查构建输出）\n构建成功 ✓", outputDir)
 	}
 	db.Save(&job)
+	PublishBuildEvent(job)
 
 	if job.ReleaseID != nil {
 		LogActivity(db, "release", *job.ReleaseID, job.TriggeredBy, "build_success", "", job.CommitSHA)
@@ -316,6 +318,7 @@ func failJob(db *gorm.DB, job *model.BuildJob, msg string) {
 	job.Log += "\n" + msg
 	job.FinishedAt = &finished
 	db.Save(job)
+	PublishBuildEvent(*job)
 	if job.ReleaseID != nil {
 		LogActivity(db, "release", *job.ReleaseID, job.TriggeredBy, "build_failed", "", msg)
 	}

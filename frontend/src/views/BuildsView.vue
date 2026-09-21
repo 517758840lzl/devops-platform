@@ -229,7 +229,7 @@
           </el-button>
         </div>
         <pre class="log">{{ current.log || '等待日志...' }}</pre>
-        <el-button v-if="current.status === 'running' || current.status === 'pending'" size="small" @click="refreshDetail">刷新</el-button>
+        <el-button v-if="current.status === 'running' || current.status === 'pending'" size="small" @click="refreshDetail">手动刷新日志</el-button>
       </template>
     </el-drawer>
   </div>
@@ -273,7 +273,7 @@ const detailVisible = ref(false)
 const current = ref(null)
 const pathPickerVisible = ref(false)
 const configVisible = ref(false)
-let pollTimer = null
+let eventSource = null
 
 const gitRepoOptions = computed(() => listProjectGitRepos(projectStore.current))
 const selectedGitURL = ref('')
@@ -405,6 +405,79 @@ async function load() {
   }
 }
 
+function disconnectBuildEvents() {
+  if (eventSource) {
+    eventSource.close()
+    eventSource = null
+  }
+}
+
+function connectBuildEvents() {
+  disconnectBuildEvents()
+  const projectId = projectStore.currentIdOrDefault
+  const token = localStorage.getItem('token')
+  if (!projectId || !token) return
+
+  const qs = new URLSearchParams({
+    project_id: String(projectId),
+    token,
+  })
+  const es = new EventSource(`/api/builds/events?${qs}`)
+  eventSource = es
+
+  es.addEventListener('build', async (e) => {
+    let ev
+    try {
+      ev = JSON.parse(e.data)
+    } catch {
+      return
+    }
+    await load()
+    if (detailVisible.value && current.value && Number(current.value.id) === Number(ev.build_id)) {
+      await refreshDetail()
+    }
+    if (ev.status === 'success' || ev.status === 'failed') {
+      const ok = ev.status === 'success'
+      const num = ev.build_number ? `#${ev.build_number}` : `#${ev.build_id}`
+      notif.add({
+        key: `build:${ev.build_id}:${ev.status}`,
+        type: 'build',
+        title: ok ? '构建成功' : '构建失败',
+        message: `构建 ${num}${ev.branch ? ` · ${ev.branch}` : ''}${ev.commit_sha ? ` · ${String(ev.commit_sha).slice(0, 8)}` : ''}`,
+        link: '/builds',
+      })
+      if (ok) ElMessage.success(`构建 ${num} 成功`)
+      else ElMessage.error(`构建 ${num} 失败`)
+    }
+  })
+}
+
+async function openDetail(row) {
+  current.value = await getBuild(row.id)
+  await loadArtifactFiles(row.id)
+  detailVisible.value = true
+}
+
+async function refreshDetail() {
+  if (!current.value) return
+  current.value = await getBuild(current.value.id)
+  await loadArtifactFiles(current.value.id)
+}
+
+onMounted(async () => {
+  await projectStore.fetchProjects()
+  syncBuildConfig()
+  await load()
+  connectBuildEvents()
+})
+watch(() => projectStore.currentId, async () => {
+  await projectStore.fetchProjects()
+  syncBuildConfig()
+  await load()
+  connectBuildEvents()
+})
+onUnmounted(disconnectBuildEvents)
+
 async function persistBuildSettings() {
   const projectId = projectStore.currentIdOrDefault
   const repo = selectedRepo.value
@@ -532,51 +605,6 @@ async function loadArtifactFiles(buildId) {
     artifactFiles.value = []
   }
 }
-
-async function openDetail(row) {
-  current.value = await getBuild(row.id)
-  await loadArtifactFiles(row.id)
-  detailVisible.value = true
-  startPoll()
-}
-
-async function refreshDetail() {
-  if (!current.value) return
-  current.value = await getBuild(current.value.id)
-  await loadArtifactFiles(current.value.id)
-}
-
-function startPoll() {
-  stopPoll()
-  pollTimer = setInterval(async () => {
-    if (!detailVisible.value || !current.value) return
-    if (current.value.status === 'success' || current.value.status === 'failed') {
-      stopPoll()
-      return
-    }
-    await refreshDetail()
-    await load()
-  }, 2000)
-}
-
-function stopPoll() {
-  if (pollTimer) {
-    clearInterval(pollTimer)
-    pollTimer = null
-  }
-}
-
-onMounted(async () => {
-  await projectStore.fetchProjects()
-  syncBuildConfig()
-  await load()
-})
-watch(() => projectStore.currentId, async () => {
-  await projectStore.fetchProjects()
-  syncBuildConfig()
-  await load()
-})
-onUnmounted(stopPoll)
 </script>
 
 <style scoped>

@@ -2,10 +2,14 @@ package handler
 
 import (
 	"archive/zip"
+	"encoding/json"
 	"fmt"
+	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
+	"time"
 
 	"devops-platform/internal/config"
 	"devops-platform/internal/model"
@@ -41,6 +45,57 @@ func (h *BuildHandler) List(c *gin.Context) {
 		return
 	}
 	response.OK(c, items)
+}
+
+// Events streams build status changes (SSE). Client refreshes list on each event — no polling.
+func (h *BuildHandler) Events(c *gin.Context) {
+	flusher, ok := c.Writer.(http.Flusher)
+	if !ok {
+		response.Fail(c, 500, "streaming unsupported")
+		return
+	}
+
+	var filterPID uint64
+	if raw := strings.TrimSpace(c.Query("project_id")); raw != "" {
+		filterPID, _ = strconv.ParseUint(raw, 10, 64)
+	}
+
+	c.Writer.Header().Set("Content-Type", "text/event-stream")
+	c.Writer.Header().Set("Cache-Control", "no-cache")
+	c.Writer.Header().Set("Connection", "keep-alive")
+	c.Writer.Header().Set("X-Accel-Buffering", "no")
+	c.Status(http.StatusOK)
+	flusher.Flush()
+
+	ch := service.BuildEvents.Subscribe()
+	defer service.BuildEvents.Unsubscribe(ch)
+
+	ping := time.NewTicker(25 * time.Second)
+	defer ping.Stop()
+
+	ctx := c.Request.Context()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ping.C:
+			_, _ = fmt.Fprintf(c.Writer, ": ping\n\n")
+			flusher.Flush()
+		case ev, open := <-ch:
+			if !open {
+				return
+			}
+			if filterPID > 0 && uint64(ev.ProjectID) != filterPID {
+				continue
+			}
+			payload, err := json.Marshal(ev)
+			if err != nil {
+				continue
+			}
+			_, _ = fmt.Fprintf(c.Writer, "event: build\ndata: %s\n\n", payload)
+			flusher.Flush()
+		}
+	}
 }
 
 func (h *BuildHandler) Get(c *gin.Context) {
@@ -114,6 +169,7 @@ func (h *BuildHandler) Trigger(c *gin.Context) {
 	}
 
 	go service.RunBuildJob(h.db, h.cfg, job.ID)
+	service.PublishBuildEvent(job)
 
 	response.OK(c, job)
 }

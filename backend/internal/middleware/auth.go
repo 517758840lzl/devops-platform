@@ -16,13 +16,19 @@ const RoleKey = "role"
 
 func Auth(cfg config.Config) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		token := ""
 		header := c.GetHeader("Authorization")
-		if header == "" || !strings.HasPrefix(header, "Bearer ") {
+		if header != "" && strings.HasPrefix(header, "Bearer ") {
+			token = strings.TrimPrefix(header, "Bearer ")
+		} else if q := strings.TrimSpace(c.Query("token")); q != "" {
+			// EventSource 无法自定义 Header，SSE 用 query token
+			token = q
+		}
+		if token == "" {
 			response.Fail(c, 401, "unauthorized")
 			c.Abort()
 			return
 		}
-		token := strings.TrimPrefix(header, "Bearer ")
 		claims, err := jwtutil.Parse(token, cfg.JWTSecret)
 		if err != nil {
 			response.Fail(c, 401, "invalid token")

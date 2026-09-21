@@ -121,6 +121,7 @@ func New(db *gorm.DB, cfg config.Config) *gin.Engine {
 		auth.DELETE("/attachments/:id", attachH.Delete)
 
 		auth.GET("/builds", buildH.List)
+		auth.GET("/builds/events", buildH.Events) // 须在 /builds/:id 之前
 		auth.GET("/builds/:id", buildH.Get)
 		auth.GET("/builds/:id/artifacts", buildH.ListArtifactFiles)
 		auth.GET("/builds/:id/download", buildH.DownloadArtifacts)
