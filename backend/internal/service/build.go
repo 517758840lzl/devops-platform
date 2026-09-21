@@ -44,7 +44,7 @@ func RunBuildJob(db *gorm.DB, cfg config.Config, jobID uint) {
 		db.Model(&job).Update("log", job.Log)
 	}
 
-	workRoot := filepath.Join(cfg.WorkspaceDir, fmt.Sprintf("project_%d", job.ProjectID), fmt.Sprintf("build_%d", job.ID))
+	workRoot := JobWorkspaceDir(cfg.WorkspaceDir, job)
 	_ = os.RemoveAll(workRoot)
 	if err := os.MkdirAll(workRoot, 0o755); err != nil {
 		failJob(db, &job, "create workspace failed: "+err.Error())
@@ -135,7 +135,7 @@ func RunBuildJob(db *gorm.DB, cfg config.Config, jobID uint) {
 		return
 	}
 
-	outputDir := BuildArtifactDir(project, job.ID)
+	outputDir := BuildArtifactDir(project, job)
 	if err := os.MkdirAll(outputDir, 0o755); err != nil {
 		failJob(db, &job, "create artifact dir failed: "+err.Error())
 		return
@@ -260,14 +260,27 @@ func ResolveBuildArtifacts(db *gorm.DB, job model.BuildJob) ([]ArtifactFile, err
 	}
 	var project model.Project
 	if err := db.First(&project, job.ProjectID).Error; err == nil {
-		candidateDirs = append(candidateDirs, BuildArtifactDir(project, job.ID))
+		candidateDirs = append(candidateDirs, BuildArtifactDir(project, job))
+		// 兼容旧版：目录曾用数据库 id 命名
+		if job.BuildNumber > 0 && job.BuildNumber != job.ID {
+			legacy := filepath.Join(ResolveArtifactBaseDir(project), fmt.Sprintf("build_%d", job.ID))
+			candidateDirs = append(candidateDirs, legacy)
+		}
 	}
-	workspaceRoot := filepath.Join("data", "workspaces", fmt.Sprintf("project_%d", job.ProjectID), fmt.Sprintf("build_%d", job.ID))
+	workspaceRoot := JobWorkspaceDir("data/workspaces", job)
 	candidateDirs = append(candidateDirs,
 		filepath.Join(workspaceRoot, "build/app/outputs/flutter-apk"),
 		filepath.Join(workspaceRoot, "build/app/outputs/apk/release"),
 		filepath.Join(workspaceRoot, "build/app/outputs/apk/debug"),
 	)
+	if job.BuildNumber > 0 && job.BuildNumber != job.ID {
+		legacyWS := filepath.Join("data", "workspaces", fmt.Sprintf("project_%d", job.ProjectID), fmt.Sprintf("build_%d", job.ID))
+		candidateDirs = append(candidateDirs,
+			filepath.Join(legacyWS, "build/app/outputs/flutter-apk"),
+			filepath.Join(legacyWS, "build/app/outputs/apk/release"),
+			filepath.Join(legacyWS, "build/app/outputs/apk/debug"),
+		)
+	}
 
 	seen := map[string]bool{}
 	var merged []ArtifactFile

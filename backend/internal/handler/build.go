@@ -272,8 +272,12 @@ func (h *BuildHandler) DeleteArtifacts(c *gin.Context) {
 	if job.ArtifactPath != "" {
 		_ = os.RemoveAll(job.ArtifactPath)
 	}
-	workspace := filepath.Join(h.cfg.WorkspaceDir, fmt.Sprintf("project_%d", job.ProjectID), fmt.Sprintf("build_%d", job.ID))
-	_ = os.RemoveAll(workspace)
+	// 新目录用构建号；同时清掉旧版用数据库 id 命名的目录
+	_ = os.RemoveAll(service.JobWorkspaceDir(h.cfg.WorkspaceDir, job))
+	if job.BuildNumber > 0 && job.BuildNumber != job.ID {
+		legacy := filepath.Join(h.cfg.WorkspaceDir, fmt.Sprintf("project_%d", job.ProjectID), fmt.Sprintf("build_%d", job.ID))
+		_ = os.RemoveAll(legacy)
+	}
 
 	job.ArtifactsDeleted = true
 	job.ArtifactPath = ""
@@ -281,7 +285,7 @@ func (h *BuildHandler) DeleteArtifacts(c *gin.Context) {
 		response.Fail(c, 500, err.Error())
 		return
 	}
-	service.LogActivity(h.db, "project", job.ProjectID, userID.(uint), "delete_build_artifacts", fmt.Sprintf("build_%d", job.ID), "")
+	service.LogActivity(h.db, "project", job.ProjectID, userID.(uint), "delete_build_artifacts", service.JobDirName(job), "")
 	response.OK(c, job)
 }
 

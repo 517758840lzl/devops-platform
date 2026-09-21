@@ -64,8 +64,22 @@ func ResolveArtifactBaseDir(p model.Project) string {
 	return dir
 }
 
-func BuildArtifactDir(p model.Project, jobID uint) string {
-	return filepath.Join(ResolveArtifactBaseDir(p), fmt.Sprintf("build_%d", jobID))
+func BuildArtifactDir(p model.Project, job model.BuildJob) string {
+	return filepath.Join(ResolveArtifactBaseDir(p), JobDirName(job))
+}
+
+// JobDirName 与网页「#构建号」一致，避免磁盘 build_12 对应页面 #8 的歧义。
+func JobDirName(job model.BuildJob) string {
+	n := job.BuildNumber
+	if n == 0 {
+		n = job.ID
+	}
+	return fmt.Sprintf("build_%d", n)
+}
+
+// JobWorkspaceDir 源码/构建工作区路径：workspaces/project_{id}/build_{构建号}
+func JobWorkspaceDir(workspaceRoot string, job model.BuildJob) string {
+	return filepath.Join(workspaceRoot, fmt.Sprintf("project_%d", job.ProjectID), JobDirName(job))
 }
 
 func InferBuildMode(p model.Project, originalName string) string {
