@@ -16,9 +16,9 @@
       <el-table-column prop="git_url" label="Git 仓库" min-width="200" show-overflow-tooltip>
         <template #default="{ row }">{{ row.git_url || '-' }}</template>
       </el-table-column>
-      <el-table-column label="构建" width="120">
+      <el-table-column label="构建" width="160" show-overflow-tooltip>
         <template #default="{ row }">
-          <span v-if="row.build_profile">{{ row.build_profile }} / {{ row.build_platform || 'android' }}</span>
+          <span v-if="row.build_profile" class="build-cell">{{ row.build_profile }} / {{ row.build_platform || 'android' }}</span>
           <span v-else>-</span>
         </template>
       </el-table-column>
@@ -32,86 +32,47 @@
       </el-table-column>
     </el-table>
 
-    <el-dialog v-model="dialogVisible" :title="editing ? '项目设置' : '新建项目'" width="620px">
-      <el-form :model="form" label-width="110px">
+    <el-dialog v-model="dialogVisible" :title="editing ? '项目设置' : '新建项目'" width="640px" destroy-on-close>
+      <el-form :model="form" label-width="130px" class="project-form">
         <el-form-item label="代号"><el-input v-model="form.code" :disabled="editing" /></el-form-item>
-        <el-form-item label="名称"><el-input v-model="form.name" /></el-form-item>
-        <el-form-item label="描述"><el-input v-model="form.description" type="textarea" /></el-form-item>
+        <el-form-item label="名称"><el-input v-model="form.name" @input="onNameInput" /></el-form-item>
+        <el-form-item label="描述"><el-input v-model="form.description" type="textarea" :rows="2" /></el-form-item>
+
         <template v-if="editing">
-          <el-divider>Git 与构建</el-divider>
-          <el-form-item label="主仓库">
+          <el-divider content-position="left">Git</el-divider>
+          <el-form-item label="Git 仓库">
             <el-input
               v-model="form.git_url"
-              placeholder="https://gitlab.com/org/repo.git 或 git@git.xxx.com:org/repo.git"
+              placeholder="https://github.com/org/repo.git 或 git@github.com:org/repo.git"
             />
-            <div class="hint">支持 GitHub / GitLab / Gitee / 自建 Git，HTTPS 或 SSH 均可</div>
-          </el-form-item>
-          <el-form-item label="主仓库分支">
-            <GitBranchSelect v-model="form.git_branch" :git-url="form.git_url" @update:model-value="onBranchChange" />
+            <div class="hint">分支在「打包构建」时选择；支持 HTTPS / SSH</div>
           </el-form-item>
 
-          <div v-for="(repo, idx) in extraGitRepos" :key="idx" class="extra-repo-block">
-            <el-form-item :label="`仓库 ${idx + 2}`">
-              <div class="repo-fields">
-                <el-input v-model="repo.name" placeholder="名称，如：配置仓 / Android 仓" class="repo-name" />
-                <el-input v-model="repo.git_url" placeholder="Git 地址" />
-                <GitBranchSelect v-model="repo.git_branch" :git-url="repo.git_url" />
-                <el-button link type="danger" @click="extraGitRepos.splice(idx, 1)">删除</el-button>
-              </div>
-            </el-form-item>
-          </div>
-          <el-form-item label=" ">
-            <el-button size="small" @click="extraGitRepos.push({ name: '', git_url: '', git_branch: 'main' })">
-              添加其他仓库
-            </el-button>
-          </el-form-item>
-
-          <el-form-item label="构建环境">
-            <el-radio-group v-model="form.build_profile" @change="onBuildPrefChange">
-              <el-radio-button value="develop">Develop (Debug)</el-radio-button>
-              <el-radio-button value="release">Release</el-radio-button>
-              <el-radio-button value="custom">自定义</el-radio-button>
-            </el-radio-group>
-          </el-form-item>
-
-          <el-form-item label="目标平台">
-            <el-radio-group v-model="form.build_platform" :disabled="form.build_profile === 'custom'" @change="onBuildPrefChange">
-              <el-radio-button value="android">Android (APK，默认)</el-radio-button>
-              <el-radio-button value="ios">iOS</el-radio-button>
-            </el-radio-group>
-          </el-form-item>
-
-          <el-form-item label="构建命令">
+          <el-divider content-position="left">应用配置</el-divider>
+          <el-form-item label="应用显示名">
             <el-input
-              v-model="form.build_command"
-              type="textarea"
-              :rows="3"
-              :disabled="form.build_profile !== 'custom'"
-              :placeholder="commandPreview"
+              v-model="form.app_display_name"
+              placeholder="AppStrings.appTitle"
+              @input="nameSyncedDisplay = false"
             />
-            <div v-if="form.build_profile !== 'custom'" class="hint">当前将执行：{{ commandPreview }}</div>
+            <div class="hint">默认跟随项目名称；进度/推送/产物命名会用到</div>
           </el-form-item>
-
-          <el-form-item label="产物输出目录">
-            <el-input v-model="form.artifact_output_dir" :placeholder="defaultArtifactHint">
-              <template #append>
-                <el-button @click="pathPickerVisible = true">选择路径</el-button>
-              </template>
-            </el-input>
-            <div class="hint">
-              初始默认：<code>{{ defaultArtifactHint }}</code>。仅支持 <code>data/artifacts/...</code> 相对路径，每次构建产物会存到该目录下的 <code>build_编号/</code> 子目录。
-            </div>
+          <el-form-item label="App ID">
+            <el-input v-model="form.app_id" placeholder="environment_config → acqChannel / 请求头 BridgeKey" />
+            <div class="hint">如 Easy Money：<code>PrimeCreditLoan</code></div>
           </el-form-item>
-          <PathPickerDialog
-            v-model="pathPickerVisible"
-            :initial-path="form.artifact_output_dir || defaultArtifactHint"
-            @select="onPathSelected"
-          />
+          <el-form-item label="渠道序号">
+            <el-input v-model="form.channel_index" placeholder="acqChannelIndex / 请求头 Position" />
+            <div class="hint">通常为 <code>0</code>，对应 lib/core/config/environment_config.dart</div>
+          </el-form-item>
+          <el-form-item label="Android 包名">
+            <el-input v-model="form.package_android" placeholder="android/app/build.gradle.kts → applicationId" />
+          </el-form-item>
         </template>
       </el-form>
       <template #footer>
         <el-button @click="dialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="submit">确定</el-button>
+        <el-button type="primary" :loading="saving" @click="submit">确定</el-button>
       </template>
     </el-dialog>
   </div>
@@ -119,48 +80,47 @@
 
 <script setup>
 import { computed, onMounted, reactive, ref } from 'vue'
-import GitBranchSelect from '../components/GitBranchSelect.vue'
-import PathPickerDialog from '../components/PathPickerDialog.vue'
-import { createProject, listProjects, updateProject } from '../api'
+import { ElMessage } from 'element-plus'
+import {
+  createProject,
+  getProjectSettings,
+  listProjects,
+  saveProjectSettings,
+  updateProject,
+} from '../api'
 import { useAuthStore } from '../stores/auth'
 import { useProjectStore } from '../stores/project'
-import {
-  defaultArtifactPath,
-  inferPlatformFromCommand,
-  inferProfileFromCommand,
-  resolveBuildCommand,
-} from '../utils/buildPresets'
-import { parseGitRepos } from '../utils/gitRepos'
-import { defaultBuildPrefs, getProjectPrefs, saveProjectPrefs } from '../utils/projectPrefs'
+import { defaultArtifactPath } from '../utils/buildPresets'
 
 const EDIT_ROLES = ['owner', 'super_admin', 'admin', 'developer']
 
 const auth = useAuthStore()
 const projectStore = useProjectStore()
 const loading = ref(false)
+const saving = ref(false)
 const items = ref([])
 const dialogVisible = ref(false)
 const editing = ref(false)
 const editId = ref(null)
-const pathPickerVisible = ref(false)
-const extraGitRepos = ref([])
+const editingRow = ref(null)
+const settingsSnapshot = ref(null)
+const nameSyncedDisplay = ref(true)
+
 const form = reactive({
-  code: '', name: '', description: '',
-  git_url: '', git_branch: 'main',
-  build_profile: 'develop', build_platform: 'android',
-  build_command: '', artifact_output_dir: '',
+  code: '',
+  name: '',
+  description: '',
+  git_url: '',
+  app_display_name: '',
+  app_id: '',
+  channel_index: '0',
+  package_android: '',
 })
 
 const canCreateProject = computed(() => {
   if (auth.user?.role === 'admin') return true
   return items.value.some((p) => EDIT_ROLES.includes(p.my_role))
 })
-
-const defaultArtifactHint = computed(() => defaultArtifactPath(form.code, editId.value))
-
-const commandPreview = computed(() =>
-  resolveBuildCommand(form.build_profile, form.build_platform, form.build_command),
-)
 
 function canEditProject(row) {
   return EDIT_ROLES.includes(row?.my_role)
@@ -174,41 +134,24 @@ function formatTime(v) {
   return v ? new Date(v).toLocaleString('zh-CN') : '-'
 }
 
-function syncCommandPreview() {
-  if (form.build_profile !== 'custom') {
-    form.build_command = commandPreview.value
+function onNameInput() {
+  if (nameSyncedDisplay.value || !form.app_display_name) {
+    form.app_display_name = form.name
+    nameSyncedDisplay.value = true
   }
 }
 
-function onBuildPrefChange() {
-  syncCommandPreview()
-  if (editId.value) {
-    saveProjectPrefs(editId.value, {
-      build_profile: form.build_profile,
-      build_platform: form.build_platform,
-    })
-  }
-}
-
-function onBranchChange(branch) {
-  if (editId.value) {
-    saveProjectPrefs(editId.value, { git_branch: branch || 'main' })
-  }
-}
-
-function onPathSelected(path) {
-  form.artifact_output_dir = path
-}
-
-function applyBuildPrefs(projectId, row = {}) {
-  const prefs = getProjectPrefs(projectId)
-  const profile = row.build_profile || prefs.build_profile || inferProfileFromCommand(row.build_command) || defaultBuildPrefs.build_profile
-  const platform = row.build_platform || prefs.build_platform || inferPlatformFromCommand(row.build_command) || defaultBuildPrefs.build_platform
-  return {
-    git_branch: row.git_branch || prefs.git_branch || defaultBuildPrefs.git_branch,
-    build_profile: profile,
-    build_platform: platform,
-  }
+function resetForm() {
+  Object.assign(form, {
+    code: '',
+    name: '',
+    description: '',
+    git_url: '',
+    app_display_name: '',
+    app_id: '',
+    channel_index: '0',
+    package_android: '',
+  })
 }
 
 async function load() {
@@ -223,14 +166,10 @@ async function load() {
 function openCreate() {
   editing.value = false
   editId.value = null
-  extraGitRepos.value = []
-  Object.assign(form, {
-    code: '', name: '', description: '',
-    git_url: '', git_branch: defaultBuildPrefs.git_branch,
-    build_profile: defaultBuildPrefs.build_profile,
-    build_platform: defaultBuildPrefs.build_platform,
-    build_command: '', artifact_output_dir: '',
-  })
+  editingRow.value = null
+  settingsSnapshot.value = null
+  nameSyncedDisplay.value = true
+  resetForm()
   dialogVisible.value = true
 }
 
@@ -239,71 +178,97 @@ function onRowClick(row) {
   openEdit(row)
 }
 
-function openEdit(row) {
+async function openEdit(row) {
   editing.value = true
   editId.value = row.id
-  const prefs = applyBuildPrefs(row.id, row)
+  editingRow.value = row
   Object.assign(form, {
     code: row.code,
     name: row.name,
     description: row.description,
     git_url: row.git_url || '',
-    git_branch: prefs.git_branch,
-    build_profile: prefs.build_profile,
-    build_platform: prefs.build_platform,
-    build_command: row.build_command || resolveBuildCommand(prefs.build_profile, prefs.build_platform, ''),
-    artifact_output_dir: row.artifact_output_dir || defaultArtifactPath(row.code, row.id),
+    app_display_name: '',
+    app_id: '',
+    channel_index: '0',
+    package_android: '',
   })
-  extraGitRepos.value = parseGitRepos(row.git_repos).map((r) => ({
-    name: r.name || '',
-    git_url: r.git_url || '',
-    git_branch: r.git_branch || 'main',
-  }))
+
+  try {
+    const settings = await getProjectSettings(row.id)
+    settingsSnapshot.value = settings || {}
+    const display = settings?.app_display_name || ''
+    nameSyncedDisplay.value = !display || display === row.name
+    Object.assign(form, {
+      app_display_name: display || row.name || '',
+      app_id: settings?.app_id || '',
+      channel_index: settings?.channel_index || '0',
+      package_android: settings?.package_android || '',
+    })
+  } catch {
+    settingsSnapshot.value = {}
+    form.app_display_name = row.name || ''
+    nameSyncedDisplay.value = true
+  }
+
   dialogVisible.value = true
 }
 
 async function submit() {
-  const payload = {
-    ...form,
-    git_branch: form.git_branch?.trim() || 'main',
-    git_repos: JSON.stringify(
-      extraGitRepos.value.filter((r) => r.git_url?.trim()).map((r) => ({
-        name: r.name?.trim() || r.git_url.trim(),
-        git_url: r.git_url.trim(),
-        git_branch: r.git_branch?.trim() || 'main',
-      })),
-    ),
-  }
-  if (payload.build_profile !== 'custom') {
-    payload.build_command = resolveBuildCommand(payload.build_profile, payload.build_platform, '')
-  }
-  if (!payload.artifact_output_dir) {
-    payload.artifact_output_dir = defaultArtifactPath(payload.code, editId.value)
-  }
-  if (editing.value) {
-    await updateProject(editId.value, payload)
-    saveProjectPrefs(editId.value, {
-      git_branch: payload.git_branch,
-      build_profile: payload.build_profile,
-      build_platform: payload.build_platform,
-    })
+  saving.value = true
+  try {
+    let projectId = editId.value
+    if (editing.value) {
+      // 只改对话框里的字段，构建相关仍走「打包构建」
+      await updateProject(projectId, {
+        ...editingRow.value,
+        code: form.code,
+        name: form.name,
+        description: form.description,
+        git_url: form.git_url?.trim() || '',
+      })
+      const base = { ...(settingsSnapshot.value || {}), project_id: projectId }
+      await saveProjectSettings(projectId, {
+        ...base,
+        app_display_name: form.app_display_name?.trim() || form.name,
+        app_id: form.app_id?.trim() || '',
+        channel_index: form.channel_index?.trim() || '0',
+        package_android: form.package_android?.trim() || '',
+      })
+    } else {
+      const created = await createProject({
+        code: form.code,
+        name: form.name,
+        description: form.description,
+        git_url: form.git_url?.trim() || '',
+        artifact_output_dir: defaultArtifactPath(form.code, null),
+        status: 'active',
+      })
+      projectId = created?.id
+    }
+
     await projectStore.fetchProjects()
-  } else {
-    await createProject(payload)
-    await projectStore.fetchProjects()
+    dialogVisible.value = false
+    await load()
+    ElMessage.success('已保存')
+  } catch (err) {
+    ElMessage.error(err.message || '保存失败')
+  } finally {
+    saving.value = false
   }
-  dialogVisible.value = false
-  await load()
 }
 
 onMounted(load)
 </script>
 
 <style scoped>
+.project-form :deep(.el-divider) { margin: 8px 0 18px; }
 .hint { font-size: 12px; color: #909399; margin-top: 6px; line-height: 1.4; }
-.extra-repo-block { margin-bottom: 4px; }
-.repo-fields { display: flex; flex-direction: column; gap: 8px; width: 100%; }
-.repo-name { max-width: 280px; }
+.hint code {
+  background: #f0f2f5;
+  padding: 0 4px;
+  border-radius: 3px;
+}
 :deep(.row-editable) { cursor: pointer; }
 :deep(.row-readonly) { cursor: default; }
+.build-cell { white-space: nowrap; }
 </style>
