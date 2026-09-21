@@ -16,7 +16,7 @@
       </div>
     </div>
 
-    <el-alert v-if="selectedRepo" type="success" :closable="false" show-icon style="margin-bottom:12px">
+    <el-alert v-if="selectedRepo" type="info" :closable="false" show-icon style="margin-bottom:12px">
       {{ selectedRepo.name }} ·
       <template v-if="buildCommit.trim()">Commit {{ buildCommit.trim().slice(0, 8) }}</template>
       <template v-else>{{ buildBranch }}</template>
@@ -412,17 +412,31 @@ function disconnectBuildEvents() {
   }
 }
 
+/** SSE 不能走 Vite /api 代理（会缓冲导致永远收不到事件），开发期直连后端。 */
+function apiBaseForSSE() {
+  // TODO(deploy): 生产前后端同源反代后直接 return ''（相对路径 /api/...）
+  if (import.meta.env.VITE_API_BASE) {
+    return String(import.meta.env.VITE_API_BASE).replace(/\/$/, '')
+  }
+  const { protocol, hostname } = window.location
+  return `${protocol}//${hostname}:8080`
+}
+
+function buildEventsURL(projectId, token) {
+  const qs = new URLSearchParams({
+    project_id: String(projectId),
+    token,
+  })
+  return `${apiBaseForSSE()}/api/builds/events?${qs}`
+}
+
 function connectBuildEvents() {
   disconnectBuildEvents()
   const projectId = projectStore.currentIdOrDefault
   const token = localStorage.getItem('token')
   if (!projectId || !token) return
 
-  const qs = new URLSearchParams({
-    project_id: String(projectId),
-    token,
-  })
-  const es = new EventSource(`/api/builds/events?${qs}`)
+  const es = new EventSource(buildEventsURL(projectId, token))
   eventSource = es
 
   es.addEventListener('build', async (e) => {
@@ -450,6 +464,10 @@ function connectBuildEvents() {
       else ElMessage.error(`构建 ${num} 失败`)
     }
   })
+
+  es.onerror = () => {
+    // 浏览器会自动重连；若持续失败（如后端重启），稍后再手动重连
+  }
 }
 
 async function openDetail(row) {
