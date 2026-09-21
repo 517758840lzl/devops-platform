@@ -100,7 +100,7 @@
         </el-form>
       </el-tab-pane>
 
-      <el-tab-pane label="合规链接" name="compliance">
+      <el-tab-pane label="协议链接" name="compliance">
         <el-form :model="form" label-width="140px" class="tab-form wide" :disabled="!canEditProjectConfig">
           <el-form-item label="官网">
             <div class="link-row">

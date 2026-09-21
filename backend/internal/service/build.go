@@ -140,12 +140,12 @@ func RunBuildJob(db *gorm.DB, cfg config.Config, jobID uint) {
 		failJob(db, &job, "create artifact dir failed: "+err.Error())
 		return
 	}
-	copied := copyBuildArtifacts(buildDir, outputDir, project.BuildPlatform, appendLog)
-
 	finished := time.Now()
+	job.FinishedAt = &finished
+	copied := copyBuildArtifacts(project, job, buildDir, outputDir, project.BuildPlatform, appendLog)
+
 	job.Status = "success"
 	job.ArtifactPath = outputDir
-	job.FinishedAt = &finished
 	if job.ShareToken == "" {
 		job.ShareToken = NewShareToken()
 	}
@@ -164,14 +164,16 @@ func RunBuildJob(db *gorm.DB, cfg config.Config, jobID uint) {
 	NotifyBuildResult(db, project, job, true)
 }
 
-func copyBuildArtifacts(buildDir, outputDir, platform string, appendLog func(string)) int {
+func copyBuildArtifacts(project model.Project, job model.BuildJob, buildDir, outputDir, platform string, appendLog func(string)) int {
 	candidates := artifactCandidates(buildDir, platform)
 	count := 0
 	for _, src := range candidates {
 		if _, err := os.Stat(src); err != nil {
 			continue
 		}
-		dst := filepath.Join(outputDir, filepath.Base(src))
+		// 磁盘文件名与下载名统一：Easy_Money_release_20260921_195122.apk
+		dstName := ArtifactDownloadFilename(project, job, filepath.Base(src))
+		dst := filepath.Join(outputDir, dstName)
 		if err := copyPath(src, dst); err != nil {
 			appendLog("copy failed: " + err.Error())
 			continue

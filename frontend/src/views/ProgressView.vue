@@ -208,7 +208,7 @@ function hintAlertType(level) {
 }
 
 function hintCategoryLabel(cat) {
-  return ({ compliance: '合规', store: '素材', bug: '测试', build: '构建' })[cat] || cat
+  return ({ compliance: '协议', store: '素材', bug: '测试', build: '构建' })[cat] || cat
 }
 
 async function loadMembers() {

@@ -97,7 +97,7 @@ var LoanAppProgressTemplate = []milestoneDef{
 		},
 	},
 	{
-		Key: "compliance", Title: "合规链接", Weight: 1,
+		Key: "compliance", Title: "协议链接", Weight: 1,
 		Items: []checklistDef{
 			{Key: "comp_privacy", Title: "隐私协议正式 URL", Weight: 1},
 			{Key: "comp_terms", Title: "用户协议正式 URL", Weight: 1},
