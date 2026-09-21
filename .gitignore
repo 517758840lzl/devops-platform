@@ -1,0 +1,36 @@
+# OS / IDE
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Local secrets / env
+.env
+.env.*
+!.env.example
+
+# Backend runtime data (DB, uploads, build workspaces, artifacts)
+backend/data/
+backend/*.db
+*.db
+
+# Large local binaries
+*.apk
+*.ipa
+*.aab
+app-release.apk
+
+# Frontend
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+
+# Go
+backend/bin/
+backend/tmp/
+*.exe
+
+# Logs
+*.log
+npm-debug.log*
