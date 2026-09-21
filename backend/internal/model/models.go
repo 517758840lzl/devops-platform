@@ -47,6 +47,7 @@ type BuildJob struct {
 	Log          string     `gorm:"type:text" json:"log"`
 	ArtifactPath     string     `gorm:"size:512" json:"artifact_path"`
 	ArtifactsDeleted bool       `json:"artifacts_deleted"`
+	ShareToken       string     `gorm:"size:64;index" json:"share_token"` // 微信推送免登录下载
 	TriggeredBy      uint       `json:"triggered_by"`
 	StartedAt    *time.Time `json:"started_at"`
 	FinishedAt   *time.Time `json:"finished_at"`
@@ -88,7 +89,12 @@ type ProjectSetting struct {
 	FigmaDesignURL    string   `gorm:"size:512" json:"figma_design_url"`
 	FigmaFigJamURL    string   `gorm:"size:512" json:"figma_figjam_url"`
 	FigmaNotes        string   `gorm:"type:text" json:"figma_notes"`
-	UpdatedAt        time.Time `json:"updated_at"`
+	// ServerChanSendKey: Server酱 Turbo SendKey（SCT 开头），构建成功推送到个人微信
+	ServerChanSendKey string `gorm:"size:128" json:"serverchan_send_key"`
+	// NotifyPublicBaseURL: 推送下载链接的前缀（前端可访问 origin）
+	// TODO(deploy): 开发期可用局域网 IP（如 http://192.168.x.x:5173）；上线换成公网域名 https://your-domain
+	NotifyPublicBaseURL string `gorm:"size:512" json:"notify_public_base_url"`
+	UpdatedAt         time.Time `json:"updated_at"`
 }
 
 type ProjectConfigFile struct {

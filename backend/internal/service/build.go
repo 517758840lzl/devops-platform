@@ -145,6 +145,9 @@ func RunBuildJob(db *gorm.DB, cfg config.Config, jobID uint) {
 	job.Status = "success"
 	job.ArtifactPath = outputDir
 	job.FinishedAt = &finished
+	if job.ShareToken == "" {
+		job.ShareToken = NewShareToken()
+	}
 	if copied > 0 {
 		job.Log = logBuf.String() + fmt.Sprintf("\n已复制 %d 个产物到: %s\n构建成功 ✓", copied, outputDir)
 	} else {
@@ -156,6 +159,7 @@ func RunBuildJob(db *gorm.DB, cfg config.Config, jobID uint) {
 		LogActivity(db, "release", *job.ReleaseID, job.TriggeredBy, "build_success", "", job.CommitSHA)
 	}
 	LogActivity(db, "project", job.ProjectID, job.TriggeredBy, "build_success", job.Branch, job.CommitSHA)
+	NotifyBuildResult(db, project, job, true)
 }
 
 func copyBuildArtifacts(buildDir, outputDir, platform string, appendLog func(string)) int {
@@ -314,6 +318,11 @@ func failJob(db *gorm.DB, job *model.BuildJob, msg string) {
 	db.Save(job)
 	if job.ReleaseID != nil {
 		LogActivity(db, "release", *job.ReleaseID, job.TriggeredBy, "build_failed", "", msg)
+	}
+	LogActivity(db, "project", job.ProjectID, job.TriggeredBy, "build_failed", job.Branch, msg)
+	var project model.Project
+	if db.First(&project, job.ProjectID).Error == nil {
+		NotifyBuildResult(db, project, *job, false)
 	}
 }
 

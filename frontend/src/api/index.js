@@ -12,6 +12,7 @@ export const createProject = (data) => request.post('/projects', data)
 export const updateProject = (id, data) => request.put(`/projects/${id}`, data)
 export const getProjectSettings = (projectId) => request.get(`/projects/${projectId}/settings`)
 export const saveProjectSettings = (projectId, data) => request.put(`/projects/${projectId}/settings`, data)
+export const testProjectNotify = (projectId, data = {}) => request.post(`/projects/${projectId}/notify/test`, data)
 
 export const listConfigFiles = (projectId, params) => request.get(`/projects/${projectId}/config-files`, { params })
 export const getConfigFileContent = (projectId, category, locale = '') =>

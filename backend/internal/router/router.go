@@ -37,6 +37,8 @@ func New(db *gorm.DB, cfg config.Config) *gin.Engine {
 	api := r.Group("/api")
 	{
 		api.POST("/auth/login", authH.Login)
+		// 微信推送免登录下载
+		api.GET("/builds/share/:token/download", buildH.DownloadByShareToken)
 	}
 
 	auth := api.Group("")
@@ -60,6 +62,7 @@ func New(db *gorm.DB, cfg config.Config) *gin.Engine {
 		auth.DELETE("/projects/:id/members/:memberId", memberH.Remove)
 		auth.GET("/projects/:id/settings", projectH.GetSettings)
 		auth.PUT("/projects/:id/settings", projectH.SaveSettings)
+		auth.POST("/projects/:id/notify/test", projectH.TestNotify)
 		auth.GET("/projects/:id/config-files", configFileH.List)
 		auth.GET("/projects/:id/config-files/:category/content", configFileH.GetContent)
 		auth.POST("/projects/:id/config-files/:category/upload", configFileH.Upload)

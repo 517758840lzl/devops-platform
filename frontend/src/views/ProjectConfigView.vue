@@ -112,6 +112,7 @@
                 @click="openUrl(form.official_website_url_prod)"
               >打开</el-button>
             </div>
+            <!-- TODO(deploy): 示例域名，按项目替换为真实官网 -->
             <div class="hint">品牌官网 / 营销落地页，如 Easy Money：<code>https://www.bluebirdfintech.com/</code></div>
           </el-form-item>
           <el-form-item label="隐私协议">
@@ -284,6 +285,41 @@
         </el-form>
       </el-tab-pane>
 
+      <el-tab-pane v-if="canEditProjectConfig" label="构建通知" name="notify">
+        <el-form :model="form" label-width="140px" class="tab-form wide" :disabled="!canEditProjectConfig">
+          <el-alert type="info" show-icon :closable="false" style="margin-bottom:16px">
+            使用 <a href="https://sct.ftqq.com" target="_blank" rel="noopener">Server酱 Turbo</a>
+            推送到个人微信。构建<strong>成功</strong>后会推送免登录下载链接；「发送测试推送」仅用于验证通道。
+          </el-alert>
+          <el-form-item label="SendKey">
+            <el-input
+              v-model="form.serverchan_send_key"
+              type="password"
+              show-password
+              clearable
+              placeholder="SCTxxxxxxxx"
+            />
+            <div class="hint">免费额度有限；密钥勿泄露。留空则关闭推送。</div>
+          </el-form-item>
+          <el-form-item label="平台访问地址">
+            <!-- TODO(deploy): placeholder 里的局域网 IP 仅开发用；上线改为公网域名，构建推送下载地址会跟着变 -->
+            <el-input
+              v-model="form.notify_public_base_url"
+              clearable
+              placeholder="http://192.168.x.x:5173 或 https://devops.example.com"
+            />
+            <div class="hint">
+              必填才能带下载链接。当前填手机能访问的前端地址；
+              <!-- TODO(deploy): 上线后改成公网域名，推送「下载地址」= 本字段 + /api/builds/share/.../download -->
+              上线后换成公网域名，微信里点开才能下包。
+            </div>
+          </el-form-item>
+          <el-form-item label=" ">
+            <el-button :loading="testingNotify" @click="onTestNotify">发送测试推送</el-button>
+          </el-form-item>
+        </el-form>
+      </el-tab-pane>
+
       <el-tab-pane label="上架素材" name="store">
         <el-form label-width="140px" class="tab-form wide">
           <el-form-item label=" ">
@@ -361,6 +397,7 @@ import {
   getProjectSettings,
   listProjectStoreAssets,
   saveProjectSettings,
+  testProjectNotify,
 } from '../api'
 import ConfigFileEditor from '../components/ConfigFileEditor.vue'
 import StoreAssetsPanel from '../components/StoreAssetsPanel.vue'
@@ -371,8 +408,8 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 const route = useRoute()
 const projectStore = useProjectStore()
 const { canEditProjectConfig, canDeleteStoreAsset, loaded, refresh: refreshPermission } = useProjectPermission()
-const allTabs = ['identity', 'product-design', 'compliance', 'i18n', 'api-map', 'sms', 'store']
-const developerOnlyTabs = ['identity', 'api-map']
+const allTabs = ['identity', 'product-design', 'compliance', 'i18n', 'api-map', 'sms', 'notify', 'store']
+const developerOnlyTabs = ['identity', 'api-map', 'notify']
 const defaultPublicTab = 'product-design'
 
 function resolveTab(raw) {
@@ -398,6 +435,7 @@ const androidAssetCount = ref(0)
 const downloadingAll = ref(false)
 const downloadingPlatform = ref('')
 const saving = ref(false)
+const testingNotify = ref(false)
 
 async function downloadStoreZip(platform) {
   if (!projectStore.currentIdOrDefault) return
@@ -474,6 +512,8 @@ const form = reactive({
   loan_contract_url_prod: '', loan_contract_url_test: '',
   requirement_doc_url: '', figma_design_url: '', figma_figjam_url: '', figma_notes: '',
   default_locale: 'zh',
+  serverchan_send_key: '',
+  notify_public_base_url: '',
 })
 
 const figmaDesignFileKey = computed(() => parseFigmaFileKey(form.figma_design_url))
@@ -547,6 +587,8 @@ async function load() {
     figma_figjam_url: data.figma_figjam_url || '',
     figma_notes: data.figma_notes || '',
     default_locale: data.default_locale || 'zh',
+    serverchan_send_key: data.serverchan_send_key || '',
+    notify_public_base_url: data.notify_public_base_url || '',
   })
   extraLinks.value = parseJSON(data.extra_compliance_links, [])
   locales.value = parseJSON(data.supported_locales, ['zh', 'en'])
@@ -588,6 +630,21 @@ async function refreshApiMapPreview() {
       .sort((a, b) => a.key.localeCompare(b.key))
   } catch {
     apiMapRows.value = []
+  }
+}
+
+async function onTestNotify() {
+  if (!projectStore.currentIdOrDefault) return
+  testingNotify.value = true
+  try {
+    await testProjectNotify(projectStore.currentIdOrDefault, {
+      serverchan_send_key: form.serverchan_send_key,
+    })
+    ElMessage.success('已发送，请查看微信')
+  } catch (e) {
+    ElMessage.error(e.message || '推送失败')
+  } finally {
+    testingNotify.value = false
   }
 }
 

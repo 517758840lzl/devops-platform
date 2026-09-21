@@ -124,6 +124,25 @@ func (h *BuildHandler) DownloadArtifacts(c *gin.Context) {
 		response.Fail(c, 404, "build not found")
 		return
 	}
+	h.writeBuildArtifacts(c, job)
+}
+
+// DownloadByShareToken 微信推送免登录下载（公开链接，持有 token 即可）
+func (h *BuildHandler) DownloadByShareToken(c *gin.Context) {
+	token := strings.TrimSpace(c.Param("token"))
+	if token == "" {
+		response.Fail(c, 400, "invalid token")
+		return
+	}
+	var job model.BuildJob
+	if err := h.db.Where("share_token = ?", token).First(&job).Error; err != nil {
+		response.Fail(c, 404, "build not found")
+		return
+	}
+	h.writeBuildArtifacts(c, job)
+}
+
+func (h *BuildHandler) writeBuildArtifacts(c *gin.Context, job model.BuildJob) {
 	if job.ArtifactsDeleted {
 		response.Fail(c, 410, "产物已删除")
 		return

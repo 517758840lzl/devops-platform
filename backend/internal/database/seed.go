@@ -59,6 +59,7 @@ func Seed(db *gorm.DB) error {
 		AppID: "PrimeCreditLoan", ChannelIndex: "0",
 		PackageAndroid: "com.bluebird.pcl", BundleIOS: "com.bluebird.pcl",
 		AppleAppID: "6808185084", AppsflyerDevKey: "PFfRT77vnCVpKaZuU3Pghg",
+		// TODO(deploy): 以下为演示域名，按真实项目替换
 		ApiBaseURLProd: "https://www.bluebirdfintech.com/",
 		ChannelCode: "GP",
 		PrivacyURLProd: "https://example.com/privacy", PrivacyURLTest: "https://test.example.com/privacy",
@@ -66,6 +67,8 @@ func Seed(db *gorm.DB) error {
 		SupportedLocales: `["en","fr"]`, DefaultLocale: "en", I18nRepoPath: "assets/i18n",
 		SmsFilterWords: `["loan scam","free money"]`, SmsSignName: "PrimeCedi", SmsTemplateID: "TPL001",
 		UrlReplaceRules: `[{"env":"prod","from":"test.example.com","to":"example.com"}]`,
+		// TODO(deploy): NotifyPublicBaseURL 上线改为公网域名；开发期可填局域网前端地址
+		NotifyPublicBaseURL: "http://192.168.1.10:5173",
 	}).Error
 
 	req1 := model.Requirement{

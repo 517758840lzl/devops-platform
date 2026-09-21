@@ -40,6 +40,8 @@ npm run dev
 - 后端：http://localhost:8080
 - 前端：http://localhost:5173
 
+> TODO(deploy)：上线后换成公网域名；「构建通知 → 平台访问地址」也要同步改，微信推送下载链接依赖该地址。
+
 ## 重置演示数据
 
 删除 `backend/data/devops.db` 后重启后端，将重新 seed 示例数据。
