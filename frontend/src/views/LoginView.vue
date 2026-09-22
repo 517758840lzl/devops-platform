@@ -1,7 +1,10 @@
 <template>
   <div class="login-page">
     <el-card class="login-card" shadow="hover">
-      <h2>研发交付管理平台</h2>
+      <div class="login-brand">
+        <img :src="appLogoUrl" alt="" class="login-logo" width="48" height="48" />
+        <h2>{{ APP_NAME }}</h2>
+      </div>
       <p class="sub">Vue + Go · 需求 · 任务 · Bug · 发布</p>
       <el-form :model="form" @submit.prevent="onSubmit">
         <el-form-item>
@@ -23,6 +26,7 @@
 import { reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
+import { APP_NAME, appLogoUrl } from '../config/brand'
 
 const router = useRouter()
 const auth = useAuthStore()
@@ -52,7 +56,15 @@ async function onSubmit() {
   width: 400px;
   padding: 8px 12px 16px;
 }
-h2 { margin: 0 0 8px; text-align: center; }
+.login-brand {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+.login-logo { border-radius: 10px; }
+h2 { margin: 0; text-align: center; font-size: 20px; }
 .sub { text-align: center; color: #909399; margin: 0 0 24px; font-size: 13px; }
 .hint { text-align: center; color: #909399; font-size: 12px; margin-top: 16px; }
 </style>

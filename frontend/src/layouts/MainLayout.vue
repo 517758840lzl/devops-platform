@@ -1,7 +1,10 @@
 <template>
   <el-container class="layout">
     <el-aside width="220px" class="aside">
-      <div class="logo">研发交付平台</div>
+      <div class="logo">
+        <img :src="appLogoUrl" alt="" class="logo-mark" width="28" height="28" />
+        <span class="logo-text">{{ APP_NAME }}</span>
+      </div>
       <el-menu :default-active="route.path" router background-color="#1d2b3a" text-color="#bfcbd9" active-text-color="#409eff">
         <el-menu-item v-for="item in menus" :key="item.path" :index="item.path">
           <el-icon><component :is="item.icon" /></el-icon>
@@ -49,6 +52,7 @@ import { useLocalNotificationWatcher } from '../composables/useLocalNotification
 import { useProjectPermission } from '../composables/useProjectPermission'
 import { useAuthStore } from '../stores/auth'
 import { useProjectStore } from '../stores/project'
+import { APP_NAME, appLogoUrl } from '../config/brand'
 
 const route = useRoute()
 const router = useRouter()
@@ -112,12 +116,23 @@ function onLogout() {
 .aside { background: #1d2b3a; }
 .logo {
   height: 56px;
-  line-height: 56px;
-  text-align: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 0 12px;
   color: #fff;
-  font-weight: 700;
-  font-size: 16px;
   border-bottom: 1px solid rgba(255,255,255,0.08);
+}
+.logo-mark {
+  flex-shrink: 0;
+  border-radius: 6px;
+}
+.logo-text {
+  font-weight: 700;
+  font-size: 15px;
+  letter-spacing: 0.02em;
+  line-height: 1.2;
 }
 .header {
   display: flex;

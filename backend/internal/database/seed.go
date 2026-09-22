@@ -34,7 +34,7 @@ func Seed(db *gorm.DB) error {
 
 	project := model.Project{
 		Name: "Prime Cedi Loan", Code: "PCL",
-		Description: "示例项目，用于演示研发交付流水线",
+		Description: "示例项目，用于演示 ZZYD 流水线",
 		GitURL:       "https://github.com/octocat/Hello-World.git",
 		GitBranch:    "master",
 		BuildCommand: "cat README && echo 'build ok'",
