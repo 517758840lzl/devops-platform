@@ -25,6 +25,7 @@ app-release.apk
 frontend/node_modules/
 frontend/dist/
 frontend/.vite/
+frontend/public/logo-preview.png
 
 # Go
 backend/bin/
