@@ -63,19 +63,25 @@
           </div>
         </template>
         <div class="hints-list">
-          <el-alert
+          <div
             v-for="h in progress.hints"
             :key="h.key"
-            :title="h.message"
-            :type="hintAlertType(h.level)"
-            show-icon
-            :closable="false"
-            class="hint-item"
+            class="hint-item-wrap"
+            role="link"
+            @click="openHint(h)"
           >
-            <template #default>
-              <span class="hint-cat">{{ hintCategoryLabel(h.category) }}</span>
-            </template>
-          </el-alert>
+            <el-alert
+              :title="h.message"
+              :type="hintAlertType(h.level)"
+              show-icon
+              :closable="false"
+              class="hint-item"
+            >
+              <template #default>
+                <span class="hint-cat">{{ hintCategoryLabel(h.category) }} · 点击前往</span>
+              </template>
+            </el-alert>
+          </div>
         </div>
       </el-card>
 
@@ -170,6 +176,7 @@
 
 <script setup>
 import { computed, onMounted, ref, watch } from 'vue'
+import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   applyProgressHints,
@@ -180,6 +187,7 @@ import {
 import { useProjectPermission } from '../composables/useProjectPermission'
 import { useProjectStore } from '../stores/project'
 
+const router = useRouter()
 const projectStore = useProjectStore()
 const { canEditProjectConfig, loaded: loadedPerm, refresh: refreshPermission } = useProjectPermission()
 
@@ -209,6 +217,26 @@ function hintAlertType(level) {
 
 function hintCategoryLabel(cat) {
   return ({ compliance: '协议', store: '素材', bug: '测试', build: '构建' })[cat] || cat
+}
+
+function hintRoute(h) {
+  switch (h.category) {
+    case 'store':
+      return { path: '/config', query: { tab: 'store' } }
+    case 'compliance':
+      return { path: '/config', query: { tab: 'compliance' } }
+    case 'bug':
+      return { path: '/bugs' }
+    case 'build':
+      return { path: '/builds' }
+    default:
+      return null
+  }
+}
+
+function openHint(h) {
+  const to = hintRoute(h)
+  if (to) router.push(to)
 }
 
 async function loadMembers() {
@@ -336,6 +364,12 @@ onMounted(load)
 }
 .hints-list { display: flex; flex-direction: column; gap: 8px; }
 .hint-item :deep(.el-alert__description) { margin-top: 2px; }
+.hint-item-wrap {
+  cursor: pointer;
+}
+.hint-item-wrap:hover {
+  filter: brightness(0.97);
+}
 .hint-cat {
   font-size: 12px;
   color: #909399;

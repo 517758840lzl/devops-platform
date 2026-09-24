@@ -80,15 +80,6 @@ var LoanAppProgressTemplate = []milestoneDef{
 		},
 	},
 	{
-		Key: "qa", Title: "测试验收", Weight: 1,
-		Items: []checklistDef{
-			{Key: "qa_smoke", Title: "冒烟用例通过", Weight: 1},
-			{Key: "qa_regression", Title: "回归用例通过", Weight: 1},
-			{Key: "qa_bugs_closed", Title: "阻塞/严重 Bug 已关闭", Weight: 2},
-			{Key: "qa_signoff", Title: "测试签字验收", Weight: 1},
-		},
-	},
-	{
 		Key: "store", Title: "上架素材", Weight: 1,
 		Items: []checklistDef{
 			{Key: "store_android", Title: "Android 上架素材齐全", Weight: 1},
@@ -103,6 +94,15 @@ var LoanAppProgressTemplate = []milestoneDef{
 			{Key: "comp_terms", Title: "用户协议正式 URL", Weight: 1},
 			{Key: "comp_website", Title: "官网正式 URL", Weight: 1},
 			// 借款合同暂不纳入进度统计
+		},
+	},
+	{
+		Key: "qa", Title: "测试验收", Weight: 1,
+		Items: []checklistDef{
+			{Key: "qa_smoke", Title: "冒烟用例通过", Weight: 1},
+			{Key: "qa_regression", Title: "回归用例通过", Weight: 1},
+			{Key: "qa_bugs_closed", Title: "阻塞/严重 Bug 已关闭", Weight: 2},
+			{Key: "qa_signoff", Title: "测试签字验收", Weight: 1},
 		},
 	},
 	{
@@ -127,7 +127,7 @@ func EnsureProgressSeeded(db *gorm.DB, projectID uint) error {
 		return err
 	}
 	if count > 0 {
-		return nil
+		return syncMilestoneSort(db, projectID)
 	}
 	return db.Transaction(func(tx *gorm.DB) error {
 		for i, ms := range LoanAppProgressTemplate {
@@ -162,6 +162,27 @@ func EnsureProgressSeeded(db *gorm.DB, projectID uint) error {
 		}
 		return nil
 	})
+}
+
+func syncMilestoneSort(db *gorm.DB, projectID uint) error {
+	order := make(map[string]int, len(LoanAppProgressTemplate))
+	for i, ms := range LoanAppProgressTemplate {
+		order[ms.Key] = i + 1
+	}
+	var milestones []model.ProjectMilestone
+	if err := db.Select("id", "key", "sort").Where("project_id = ?", projectID).Find(&milestones).Error; err != nil {
+		return err
+	}
+	for _, m := range milestones {
+		sort, ok := order[m.Key]
+		if !ok || m.Sort == sort {
+			continue
+		}
+		if err := db.Model(&model.ProjectMilestone{}).Where("id = ?", m.ID).Update("sort", sort).Error; err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 type ProgressHint struct {
