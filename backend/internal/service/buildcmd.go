@@ -8,12 +8,16 @@ import (
 	"devops-platform/internal/model"
 )
 
-func DefaultArtifactDir(project model.Project) string {
+func projectArtifactCode(project model.Project) string {
 	code := strings.TrimSpace(project.Code)
 	if code == "" {
-		code = fmt.Sprintf("project_%d", project.ID)
+		return fmt.Sprintf("project_%d", project.ID)
 	}
-	return filepath.Join("data", "artifacts", code)
+	return code
+}
+
+func DefaultArtifactDir(project model.Project, artifactRoot string) string {
+	return filepath.Join(artifactRoot, projectArtifactCode(project))
 }
 
 func ResolveBuildCommand(p model.Project) string {
@@ -49,23 +53,37 @@ func SanitizeArtifactOutputDir(dir string) string {
 	if filepath.IsAbs(clean) {
 		return ""
 	}
-	prefix := filepath.Join("data", "artifacts")
-	if clean != prefix && !strings.HasPrefix(clean, prefix+string(filepath.Separator)) {
+	slash := filepath.ToSlash(clean)
+	if slash != "data/artifacts" && !strings.HasPrefix(slash, "data/artifacts/") &&
+		slash != "artifacts" && !strings.HasPrefix(slash, "artifacts/") {
 		return ""
 	}
 	return clean
 }
 
-func ResolveArtifactBaseDir(p model.Project) string {
-	dir := SanitizeArtifactOutputDir(p.ArtifactOutputDir)
-	if dir == "" {
-		return DefaultArtifactDir(p)
+func artifactRelUnderRoot(dir string) string {
+	slash := filepath.ToSlash(dir)
+	slash = strings.TrimPrefix(slash, "data/artifacts/")
+	slash = strings.TrimPrefix(slash, "artifacts/")
+	if slash == "data/artifacts" || slash == "artifacts" {
+		return ""
 	}
-	return dir
+	return filepath.FromSlash(slash)
 }
 
-func BuildArtifactDir(p model.Project, job model.BuildJob) string {
-	return filepath.Join(ResolveArtifactBaseDir(p), JobDirName(job))
+func ResolveArtifactBaseDir(p model.Project, artifactRoot string) string {
+	dir := SanitizeArtifactOutputDir(p.ArtifactOutputDir)
+	if dir == "" {
+		return DefaultArtifactDir(p, artifactRoot)
+	}
+	if rel := artifactRelUnderRoot(dir); rel != "" {
+		return filepath.Join(artifactRoot, rel)
+	}
+	return DefaultArtifactDir(p, artifactRoot)
+}
+
+func BuildArtifactDir(p model.Project, job model.BuildJob, artifactRoot string) string {
+	return filepath.Join(ResolveArtifactBaseDir(p, artifactRoot), JobDirName(job))
 }
 
 // JobDirName 与网页「#构建号」一致，避免磁盘 build_12 对应页面 #8 的歧义。

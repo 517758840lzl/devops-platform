@@ -60,11 +60,6 @@ func UpsertConfigFile(db *gorm.DB, uploadDir string, projectID uint, category, l
 		locale = ""
 	}
 
-	dir := ConfigFileDir(uploadDir, projectID, category, locale)
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return nil, err
-	}
-
 	ext := filepath.Ext(originalName)
 	if ext == "" {
 		switch category {
@@ -75,7 +70,11 @@ func UpsertConfigFile(db *gorm.DB, uploadDir string, projectID uint, category, l
 		}
 	}
 	stored := "content" + ext
-	savePath := filepath.Join(dir, stored)
+	rel := configFileRelPath(projectID, category, locale, stored)
+	savePath := filepath.Join(uploadDir, rel)
+	if err := os.MkdirAll(filepath.Dir(savePath), 0o755); err != nil {
+		return nil, err
+	}
 	if err := os.WriteFile(savePath, []byte(content), 0o644); err != nil {
 		return nil, err
 	}
@@ -85,7 +84,7 @@ func UpsertConfigFile(db *gorm.DB, uploadDir string, projectID uint, category, l
 		ProjectID:    projectID,
 		Category:     category,
 		Locale:       locale,
-		FilePath:     savePath,
+		FilePath:     rel,
 		OriginalName: originalName,
 		Size:         int64(len(content)),
 		ItemCount:    itemCount,
@@ -109,9 +108,70 @@ func UpsertConfigFile(db *gorm.DB, uploadDir string, projectID uint, category, l
 	return &record, nil
 }
 
-func ReadConfigFileContent(record *model.ProjectConfigFile) (string, error) {
-	data, err := os.ReadFile(record.FilePath)
+func configFileRelPath(projectID uint, category, locale, storedName string) string {
+	parts := []string{"config", fmt.Sprintf("project_%d", projectID), category}
+	if locale != "" {
+		parts = append(parts, locale)
+	}
+	parts = append(parts, storedName)
+	return filepath.Join(parts...)
+}
+
+func storedConfigName(record *model.ProjectConfigFile) string {
+	name := filepath.Base(record.FilePath)
+	if name != "" && name != "." && name != string(filepath.Separator) {
+		return name
+	}
+	ext := filepath.Ext(record.OriginalName)
+	if ext == "" {
+		switch record.Category {
+		case "i18n_source", "i18n_locale", "api_constants":
+			ext = ".dart"
+		default:
+			ext = ".txt"
+		}
+	}
+	return "content" + ext
+}
+
+// ResolveConfigFilePath maps a DB record to the file under uploadDir.
+// Old rows stored CWD-relative paths like data/uploads/config/project_2/.../content.dart.
+func ResolveConfigFilePath(uploadDir string, record *model.ProjectConfigFile) string {
+	if record == nil {
+		return ""
+	}
+	canonical := filepath.Join(uploadDir, configFileRelPath(record.ProjectID, record.Category, record.Locale, storedConfigName(record)))
+	candidates := []string{canonical}
+	raw := strings.TrimSpace(record.FilePath)
+	if raw != "" {
+		slash := filepath.ToSlash(raw)
+		if idx := strings.Index(slash, "config/"); idx >= 0 {
+			candidates = append(candidates, filepath.Join(uploadDir, filepath.FromSlash(slash[idx:])))
+		}
+	}
+	for _, p := range candidates {
+		if p == "" {
+			continue
+		}
+		if _, err := os.Stat(p); err == nil {
+			return p
+		}
+	}
+	return canonical
+}
+
+func ConfigFileOnDisk(uploadDir string, record *model.ProjectConfigFile) bool {
+	_, err := os.Stat(ResolveConfigFilePath(uploadDir, record))
+	return err == nil
+}
+
+func ReadConfigFileContent(uploadDir string, record *model.ProjectConfigFile) (string, error) {
+	path := ResolveConfigFilePath(uploadDir, record)
+	data, err := os.ReadFile(path)
 	if err != nil {
+		if os.IsNotExist(err) {
+			return "", nil
+		}
 		return "", err
 	}
 	return string(data), nil
@@ -158,15 +218,15 @@ func loadConfigKeys(db *gorm.DB, uploadDir string, projectID uint, category, loc
 		}
 		return nil, err
 	}
-	content, err := ReadConfigFileContent(&record)
+	content, err := ReadConfigFileContent(uploadDir, &record)
 	if err != nil {
 		return nil, err
 	}
 	return ParseDartStringConsts(content), nil
 }
 
-func PreviewConfigFile(record *model.ProjectConfigFile) (any, error) {
-	content, err := ReadConfigFileContent(record)
+func PreviewConfigFile(uploadDir string, record *model.ProjectConfigFile) (any, error) {
+	content, err := ReadConfigFileContent(uploadDir, record)
 	if err != nil {
 		return nil, err
 	}

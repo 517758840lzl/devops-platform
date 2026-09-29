@@ -67,9 +67,13 @@ const saving = ref(false)
 
 async function load() {
   if (!props.projectId) return
-  const data = await getConfigFileContent(props.projectId, props.category, props.locale)
-  meta.value = data
-  if (data.exists) draft.value = data.content || ''
+  try {
+    const data = await getConfigFileContent(props.projectId, props.category, props.locale)
+    meta.value = data
+    if (data.exists) draft.value = data.content || ''
+  } catch {
+    meta.value = { exists: false }
+  }
 }
 
 async function onPick(uploadFile) {

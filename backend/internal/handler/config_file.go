@@ -71,7 +71,11 @@ func (h *ConfigFileHandler) GetContent(c *gin.Context) {
 		response.Fail(c, 500, err.Error())
 		return
 	}
-	content, err := service.ReadConfigFileContent(&record)
+	if !service.ConfigFileOnDisk(h.cfg.UploadDir, &record) {
+		response.OK(c, gin.H{"exists": false, "content": ""})
+		return
+	}
+	content, err := service.ReadConfigFileContent(h.cfg.UploadDir, &record)
 	if err != nil {
 		response.Fail(c, 500, err.Error())
 		return
@@ -216,7 +220,11 @@ func (h *ConfigFileHandler) Preview(c *gin.Context) {
 		response.Fail(c, 500, err.Error())
 		return
 	}
-	items, err := service.PreviewConfigFile(&record)
+	if !service.ConfigFileOnDisk(h.cfg.UploadDir, &record) {
+		response.OK(c, gin.H{"items": gin.H{}})
+		return
+	}
+	items, err := service.PreviewConfigFile(h.cfg.UploadDir, &record)
 	if err != nil {
 		response.Fail(c, 500, err.Error())
 		return

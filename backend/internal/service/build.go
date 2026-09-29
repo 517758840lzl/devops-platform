@@ -135,7 +135,7 @@ func RunBuildJob(db *gorm.DB, cfg config.Config, jobID uint) {
 		return
 	}
 
-	outputDir := BuildArtifactDir(project, job)
+	outputDir := BuildArtifactDir(project, job, cfg.ArtifactDir)
 	if err := os.MkdirAll(outputDir, 0o755); err != nil {
 		failJob(db, &job, "create artifact dir failed: "+err.Error())
 		return
@@ -148,7 +148,7 @@ func RunBuildJob(db *gorm.DB, cfg config.Config, jobID uint) {
 	}
 
 	job.Status = "success"
-	job.ArtifactPath = outputDir
+	job.ArtifactPath = config.RelDataPath(cfg.DataDir, outputDir)
 	if job.ShareToken == "" {
 		job.ShareToken = NewShareToken()
 	}
@@ -283,17 +283,17 @@ func CollectArtifactFiles(artifactPath string) ([]ArtifactFile, error) {
 	return files, nil
 }
 
-func ResolveBuildArtifacts(db *gorm.DB, job model.BuildJob) ([]ArtifactFile, error) {
+func ResolveBuildArtifacts(db *gorm.DB, cfg config.Config, job model.BuildJob) ([]ArtifactFile, error) {
 	// 优先只读正式产物目录；勿再扫工作区 flutter 输出，否则同一 APK 会以不同文件名出现两次
 	var dirs []string
 	if p := strings.TrimSpace(job.ArtifactPath); p != "" {
-		dirs = append(dirs, p)
+		dirs = append(dirs, config.ResolveUnderDataDir(cfg.DataDir, p))
 	}
 	var project model.Project
 	if err := db.First(&project, job.ProjectID).Error; err == nil {
-		dirs = append(dirs, BuildArtifactDir(project, job))
+		dirs = append(dirs, BuildArtifactDir(project, job, cfg.ArtifactDir))
 		if job.BuildNumber > 0 && job.BuildNumber != job.ID {
-			dirs = append(dirs, filepath.Join(ResolveArtifactBaseDir(project), fmt.Sprintf("build_%d", job.ID)))
+			dirs = append(dirs, filepath.Join(ResolveArtifactBaseDir(project, cfg.ArtifactDir), fmt.Sprintf("build_%d", job.ID)))
 		}
 	}
 
@@ -302,7 +302,7 @@ func ResolveBuildArtifacts(db *gorm.DB, job model.BuildJob) ([]ArtifactFile, err
 	}
 
 	// 兜底：正式目录空时才扫工作区原始输出
-	workspaceRoot := JobWorkspaceDir("data/workspaces", job)
+	workspaceRoot := JobWorkspaceDir(cfg.WorkspaceDir, job)
 	fallback := []string{
 		filepath.Join(workspaceRoot, "build/app/outputs/flutter-apk"),
 		filepath.Join(workspaceRoot, "build/app/outputs/apk/release"),

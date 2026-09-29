@@ -120,7 +120,7 @@
                   <el-button @click="pathPickerVisible = true">选择路径</el-button>
                 </template>
               </el-input>
-              <p class="hint">仅支持 <code>data/artifacts/...</code>；每次构建写入其下的 <code>build_编号/</code></p>
+              <p class="hint">这里只填相对目录 <code>data/artifacts/项目代号</code>，真正磁盘位置由环境变量 <code>DATA_DIR</code> 决定，搬家只改那一处。</p>
             </div>
           </div>
         </section>

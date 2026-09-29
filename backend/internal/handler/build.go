@@ -207,7 +207,7 @@ func (h *BuildHandler) writeBuildArtifacts(c *gin.Context, job model.BuildJob) {
 		response.Fail(c, 404, "no artifacts")
 		return
 	}
-	entries, err := service.ResolveBuildArtifacts(h.db, job)
+	entries, err := service.ResolveBuildArtifacts(h.db, h.cfg, job)
 	if err != nil || len(entries) == 0 {
 		response.Fail(c, 404, "未找到 APK/AAB/IPA 构建产物，请重新构建")
 		return
@@ -270,7 +270,7 @@ func (h *BuildHandler) DeleteArtifacts(c *gin.Context) {
 	}
 
 	if job.ArtifactPath != "" {
-		_ = os.RemoveAll(job.ArtifactPath)
+		_ = os.RemoveAll(config.ResolveUnderDataDir(h.cfg.DataDir, job.ArtifactPath))
 	}
 	// 新目录用构建号；同时清掉旧版用数据库 id 命名的目录
 	_ = os.RemoveAll(service.JobWorkspaceDir(h.cfg.WorkspaceDir, job))
@@ -312,7 +312,7 @@ func (h *BuildHandler) ListArtifactFiles(c *gin.Context) {
 		response.OK(c, []gin.H{})
 		return
 	}
-	entries, err := service.ResolveBuildArtifacts(h.db, job)
+	entries, err := service.ResolveBuildArtifacts(h.db, h.cfg, job)
 	if err != nil {
 		response.OK(c, []gin.H{})
 		return
@@ -346,8 +346,9 @@ func (h *BuildHandler) DownloadArtifactFile(c *gin.Context) {
 		response.Fail(c, 400, "invalid path")
 		return
 	}
-	diskPath := filepath.Join(job.ArtifactPath, filepath.FromSlash(filePath))
-	if !strings.HasPrefix(diskPath, filepath.Clean(job.ArtifactPath)+string(os.PathSeparator)) && diskPath != filepath.Clean(job.ArtifactPath) {
+	base := config.ResolveUnderDataDir(h.cfg.DataDir, job.ArtifactPath)
+	diskPath := filepath.Join(base, filepath.FromSlash(filePath))
+	if !strings.HasPrefix(diskPath, filepath.Clean(base)+string(os.PathSeparator)) && diskPath != filepath.Clean(base) {
 		response.Fail(c, 400, "invalid path")
 		return
 	}

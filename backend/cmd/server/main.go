@@ -22,7 +22,7 @@ func main() {
 	}
 
 	r := router.New(db, cfg)
-	log.Printf("server listening on http://localhost:%s", cfg.Port)
+	log.Printf("server listening on http://localhost:%s data=%s", cfg.Port, cfg.DataDir)
 	if err := r.Run(":" + cfg.Port); err != nil {
 		log.Fatal(err)
 	}
