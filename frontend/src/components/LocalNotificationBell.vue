@@ -2,7 +2,7 @@
   <el-popover placement="bottom-end" :width="360" trigger="click" @show="onOpen">
     <template #reference>
       <el-badge :value="unreadCount" :hidden="!unreadCount" :max="99" class="bell-badge">
-        <el-button circle plain class="bell-btn" title="本地通知">
+        <el-button circle plain class="bell-btn" title="项目通知">
           <el-icon :size="18"><Bell /></el-icon>
         </el-button>
       </el-badge>
@@ -10,13 +10,13 @@
 
     <div class="panel">
       <div class="panel-header">
-        <span class="panel-title">本地通知</span>
+        <span class="panel-title">项目通知</span>
         <div class="panel-actions">
           <el-button v-if="unreadCount" link type="primary" size="small" @click="markAllRead">全部已读</el-button>
           <el-button v-if="items.length" link type="danger" size="small" @click="clearAll">清空</el-button>
         </div>
       </div>
-      <div class="panel-hint">仅保存在本浏览器，换设备或清缓存后会消失</div>
+      <div class="panel-hint">按项目权限定向推送，打开页面即可实时收到</div>
 
       <div v-if="!items.length" class="empty">暂无通知</div>
       <div v-else class="list">

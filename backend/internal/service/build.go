@@ -159,6 +159,7 @@ func RunBuildJob(db *gorm.DB, cfg config.Config, jobID uint) {
 	}
 	db.Save(&job)
 	PublishBuildEvent(job)
+	PublishBuildNotification(db, job)
 
 	if job.ReleaseID != nil {
 		LogActivity(db, "release", *job.ReleaseID, job.TriggeredBy, "build_success", "", job.CommitSHA)
@@ -377,6 +378,7 @@ func failJob(db *gorm.DB, job *model.BuildJob, msg string) {
 	job.FinishedAt = &finished
 	db.Save(job)
 	PublishBuildEvent(*job)
+	PublishBuildNotification(db, *job)
 	if job.ReleaseID != nil {
 		LogActivity(db, "release", *job.ReleaseID, job.TriggeredBy, "build_failed", "", msg)
 	}

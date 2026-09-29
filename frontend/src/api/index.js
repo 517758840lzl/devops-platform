@@ -13,6 +13,10 @@ export const updateProject = (id, data) => request.put(`/projects/${id}`, data)
 export const getProjectSettings = (projectId) => request.get(`/projects/${projectId}/settings`)
 export const saveProjectSettings = (projectId, data) => request.put(`/projects/${projectId}/settings`, data)
 export const testProjectNotify = (projectId, data = {}) => request.post(`/projects/${projectId}/notify/test`, data)
+export const listNotifications = (projectId) => request.get('/notifications', { params: { project_id: projectId } })
+export const markNotificationRead = (id) => request.post(`/notifications/${id}/read`)
+export const markAllNotificationsRead = (projectId) =>
+  request.post('/notifications/read-all', null, { params: { project_id: projectId } })
 
 export const listConfigFiles = (projectId, params) => request.get(`/projects/${projectId}/config-files`, { params })
 export const getConfigFileContent = (projectId, category, locale = '') =>

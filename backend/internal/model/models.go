@@ -293,3 +293,25 @@ type ProjectChecklistItem struct {
 	UpdatedAt   time.Time `json:"updated_at"`
 	Assignee    *User     `gorm:"foreignKey:AssigneeID" json:"assignee,omitempty"`
 }
+
+// Notification is a project-scoped event shown to everyone with the app open.
+type Notification struct {
+	ID        uint      `gorm:"primaryKey" json:"id"`
+	ProjectID uint      `gorm:"index" json:"project_id"`
+	Type      string    `gorm:"size:32;index" json:"type"` // build | bug | release
+	Title     string    `gorm:"size:128" json:"title"`
+	Message   string    `gorm:"size:512" json:"message"`
+	Link           string    `gorm:"size:128" json:"link"`
+	EventKey       string    `gorm:"size:128;uniqueIndex" json:"event_key"`
+	Audience       string    `gorm:"size:16;index" json:"audience"` // members | writers | approvers | user
+	AudienceUserID *uint     `json:"audience_user_id,omitempty"`
+	CreatedAt      time.Time `json:"created_at"`
+}
+
+// NotificationRead records per-user read state.
+type NotificationRead struct {
+	ID             uint      `gorm:"primaryKey" json:"id"`
+	NotificationID uint      `gorm:"uniqueIndex:idx_notif_user_read" json:"notification_id"`
+	UserID         uint      `gorm:"uniqueIndex:idx_notif_user_read" json:"user_id"`
+	CreatedAt      time.Time `json:"created_at"`
+}

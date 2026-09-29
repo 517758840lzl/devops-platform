@@ -286,6 +286,19 @@ func (h *BuildHandler) DeleteArtifacts(c *gin.Context) {
 		return
 	}
 	service.LogActivity(h.db, "project", job.ProjectID, userID.(uint), "delete_build_artifacts", service.JobDirName(job), "")
+	num := job.BuildNumber
+	if num == 0 {
+		num = job.ID
+	}
+	service.PublishNotification(h.db, model.Notification{
+		ProjectID: job.ProjectID,
+		Type:      "build",
+		Title:     "产物已删除",
+		Message:   fmt.Sprintf("构建 #%d · %s", num, job.Branch),
+		Link:      "/builds",
+		EventKey:  fmt.Sprintf("build:%d:artifacts_deleted", job.ID),
+		Audience:  service.AudienceMembers,
+	})
 	response.OK(c, job)
 }
 

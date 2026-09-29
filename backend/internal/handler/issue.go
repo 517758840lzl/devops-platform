@@ -99,6 +99,9 @@ func (h *IssueHandler) Create(c *gin.Context) {
 		return
 	}
 	service.LogActivity(h.db, "issue", item.ID, userID.(uint), "create", "", item.Title)
+	if item.Type == "bug" && item.AssigneeID != nil {
+		service.PublishBugAssigneeNotification(h.db, item.ProjectID, item.ID, item.Title, *item.AssigneeID, userID.(uint))
+	}
 	response.OK(c, item)
 }
 
@@ -124,6 +127,7 @@ func (h *IssueHandler) Update(c *gin.Context) {
 		return
 	}
 	oldStatus := item.Status
+	oldAssignee := item.AssigneeID
 	item.Title = req.Title
 	item.Description = req.Description
 	item.Status = req.Status
@@ -150,6 +154,21 @@ func (h *IssueHandler) Update(c *gin.Context) {
 	}
 	if oldStatus != item.Status {
 		service.LogActivity(h.db, "issue", item.ID, userID.(uint), "status_change", oldStatus, item.Status)
+	}
+	if item.Type == "bug" {
+		if oldStatus != item.Status {
+			service.PublishBugStatusNotification(h.db, item, userID.(uint))
+		}
+		newAID, oldAID := uint(0), uint(0)
+		if item.AssigneeID != nil {
+			newAID = *item.AssigneeID
+		}
+		if oldAssignee != nil {
+			oldAID = *oldAssignee
+		}
+		if newAID != 0 && newAID != oldAID {
+			service.PublishBugAssigneeNotification(h.db, item.ProjectID, item.ID, item.Title, newAID, userID.(uint))
+		}
 	}
 	response.OK(c, item)
 }
@@ -186,5 +205,8 @@ func (h *IssueHandler) PatchStatus(c *gin.Context) {
 		return
 	}
 	service.LogActivity(h.db, "issue", item.ID, userID.(uint), "status_change", oldStatus, req.Status)
+	if item.Type == "bug" && oldStatus != req.Status {
+		service.PublishBugStatusNotification(h.db, item, userID.(uint))
+	}
 	response.OK(c, item)
 }

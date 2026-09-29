@@ -31,6 +31,7 @@ func New(db *gorm.DB, cfg config.Config) *gin.Engine {
 	projectStoreAssetH := handler.NewProjectStoreAssetHandler(db, cfg)
 	configFileH := handler.NewConfigFileHandler(db, cfg)
 	progressH := handler.NewProgressHandler(db)
+	notifH := handler.NewNotificationHandler(db)
 
 	r.Static("/uploads", cfg.UploadDir)
 
@@ -119,6 +120,11 @@ func New(db *gorm.DB, cfg config.Config) *gin.Engine {
 		auth.GET("/attachments", attachH.List)
 		auth.POST("/attachments/upload", attachH.Upload)
 		auth.DELETE("/attachments/:id", attachH.Delete)
+
+		auth.GET("/notifications", notifH.List)
+		auth.GET("/notifications/events", notifH.Events)
+		auth.POST("/notifications/read-all", notifH.MarkAllRead)
+		auth.POST("/notifications/:id/read", notifH.MarkRead)
 
 		auth.GET("/builds", buildH.List)
 		auth.GET("/builds/events", buildH.Events) // 须在 /builds/:id 之前

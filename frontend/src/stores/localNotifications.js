@@ -1,67 +1,75 @@
 import { defineStore } from 'pinia'
+import { listNotifications, markAllNotificationsRead, markNotificationRead } from '../api'
 
-const STORAGE_KEY = 'devops_local_notifications'
-const WATCH_KEY = 'devops_local_notification_watch'
-const MAX_ITEMS = 80
-
-function loadJSON(key, fallback) {
-  try {
-    return JSON.parse(localStorage.getItem(key) || '')
-  } catch {
-    return fallback
+function normalize(row) {
+  return {
+    id: row.id,
+    key: row.event_key || `n:${row.id}`,
+    type: row.type,
+    title: row.title,
+    message: row.message,
+    link: row.link,
+    read: !!row.read,
+    createdAt: row.created_at,
+    projectId: row.project_id,
   }
 }
 
 export const useLocalNotificationStore = defineStore('localNotifications', {
   state: () => ({
-    items: loadJSON(STORAGE_KEY, []),
-    watchState: loadJSON(WATCH_KEY, {}),
+    items: [],
+    projectId: null,
+    loading: false,
   }),
   getters: {
     unreadCount: (s) => s.items.filter((i) => !i.read).length,
     recentItems: (s) => s.items.slice(0, 30),
   },
   actions: {
-    persistItems() {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(this.items.slice(0, MAX_ITEMS)))
+    async load(projectId) {
+      this.projectId = projectId || null
+      if (!projectId) {
+        this.items = []
+        return
+      }
+      this.loading = true
+      try {
+        const rows = await listNotifications(projectId)
+        this.items = (rows || []).map(normalize)
+      } catch {
+        this.items = []
+      } finally {
+        this.loading = false
+      }
     },
-    persistWatch() {
-      localStorage.setItem(WATCH_KEY, JSON.stringify(this.watchState))
+    pushRemote(row) {
+      const item = normalize(row)
+      if (this.projectId && item.projectId && Number(item.projectId) !== Number(this.projectId)) {
+        return
+      }
+      if (this.items.some((i) => i.id === item.id || i.key === item.key)) return
+      this.items.unshift(item)
     },
-    add({ key, type, title, message, link }) {
-      if (this.items.some((i) => i.key === key)) return
-      this.items.unshift({
-        id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-        key,
-        type,
-        title,
-        message,
-        link,
-        read: false,
-        createdAt: new Date().toISOString(),
-      })
-      this.persistItems()
-    },
-    markRead(id) {
+    async markRead(id) {
       const item = this.items.find((i) => i.id === id)
       if (item) item.read = true
-      this.persistItems()
+      try {
+        await markNotificationRead(id)
+      } catch {
+        /* keep optimistic */
+      }
     },
-    markAllRead() {
+    async markAllRead() {
       this.items.forEach((i) => { i.read = true })
-      this.persistItems()
+      if (!this.projectId) return
+      try {
+        await markAllNotificationsRead(this.projectId)
+      } catch {
+        /* keep optimistic */
+      }
     },
-    remove(id) {
-      this.items = this.items.filter((i) => i.id !== id)
-      this.persistItems()
-    },
-    clearAll() {
-      this.items = []
-      this.persistItems()
-    },
-    resetWatch() {
-      this.watchState = {}
-      this.persistWatch()
+    async clearAll() {
+      await this.markAllRead()
     },
   },
 })

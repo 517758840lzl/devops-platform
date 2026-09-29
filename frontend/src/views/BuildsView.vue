@@ -265,8 +265,8 @@ import {
   triggerProjectBuild,
   updateProject,
 } from '../api'
-import { useLocalNotificationStore } from '../stores/localNotifications'
 import { useProjectStore } from '../stores/project'
+import { apiBaseForSSE } from '../utils/sse'
 import {
   defaultArtifactPath,
   inferPlatformFromCommand,
@@ -277,7 +277,6 @@ import { listProjectGitRepos, parseGitRepos } from '../utils/gitRepos'
 import { defaultBuildPrefs, getProjectPrefs, saveProjectPrefs } from '../utils/projectPrefs'
 
 const projectStore = useProjectStore()
-const notif = useLocalNotificationStore()
 const loading = ref(false)
 const triggering = ref(false)
 const downloadingId = ref(null)
@@ -427,16 +426,6 @@ function disconnectBuildEvents() {
   }
 }
 
-/** SSE 不能走 Vite /api 代理（会缓冲导致永远收不到事件），开发期直连后端。 */
-function apiBaseForSSE() {
-  // TODO(deploy): 生产前后端同源反代后直接 return ''（相对路径 /api/...）
-  if (import.meta.env.VITE_API_BASE) {
-    return String(import.meta.env.VITE_API_BASE).replace(/\/$/, '')
-  }
-  const { protocol, hostname } = window.location
-  return `${protocol}//${hostname}:8080`
-}
-
 function buildEventsURL(projectId, token) {
   const qs = new URLSearchParams({
     project_id: String(projectId),
@@ -468,13 +457,6 @@ function connectBuildEvents() {
     if (ev.status === 'success' || ev.status === 'failed') {
       const ok = ev.status === 'success'
       const num = ev.build_number ? `#${ev.build_number}` : `#${ev.build_id}`
-      notif.add({
-        key: `build:${ev.build_id}:${ev.status}`,
-        type: 'build',
-        title: ok ? '构建成功' : '构建失败',
-        message: `构建 ${num}${ev.branch ? ` · ${ev.branch}` : ''}${ev.commit_sha ? ` · ${String(ev.commit_sha).slice(0, 8)}` : ''}`,
-        link: '/builds',
-      })
       if (ok) ElMessage.success(`构建 ${num} 成功`)
       else ElMessage.error(`构建 ${num} 失败`)
     }
@@ -616,13 +598,6 @@ async function deleteArtifacts(row) {
     }
     const listRow = items.value.find((i) => i.id === row.id)
     if (listRow) Object.assign(listRow, updated)
-    notif.add({
-      key: `build:${row.id}:artifacts_deleted`,
-      type: 'build',
-      title: '产物已删除',
-      message: `构建 #${row.build_number || row.id} · ${row.branch}${row.commit_sha ? ` · ${String(row.commit_sha).slice(0, 8)}` : ''}`,
-      link: '/builds',
-    })
     ElMessage.success('产物已删除')
   } catch (err) {
     ElMessage.error(err.message || '删除失败')

@@ -1,6 +1,8 @@
 package handler
 
 import (
+	"fmt"
+	"strings"
 	"time"
 
 	"devops-platform/internal/model"
@@ -162,6 +164,15 @@ func (h *ReleaseHandler) Submit(c *gin.Context) {
 	}
 	h.recordApproval(item.ID, userID.(uint), "submit", req.Comment)
 	service.LogActivity(h.db, "release", item.ID, userID.(uint), "submit_approval", "draft", "pending_approval")
+	service.PublishNotification(h.db, model.Notification{
+		ProjectID: item.ProjectID,
+		Type:      "release",
+		Title:     "发布待审批",
+		Message:   strings.TrimSpace(item.Version + " " + item.Title),
+		Link:      "/releases",
+		EventKey:  fmt.Sprintf("release:%d:pending", item.ID),
+		Audience:  service.AudienceApprovers,
+	})
 	response.OK(c, item)
 }
 

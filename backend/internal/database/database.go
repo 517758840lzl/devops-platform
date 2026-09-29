@@ -38,6 +38,8 @@ func Migrate(db *gorm.DB) error {
 		&model.ActivityLog{},
 		&model.ProjectMilestone{},
 		&model.ProjectChecklistItem{},
+		&model.Notification{},
+		&model.NotificationRead{},
 	); err != nil {
 		return err
 	}
