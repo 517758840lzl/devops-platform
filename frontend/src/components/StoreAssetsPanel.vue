@@ -59,8 +59,21 @@
     </div>
 
     <div v-if="screenshotSlots.length" class="shots-block">
-      <div class="block-title">应用截图</div>
-      <div class="size-tip">{{ screenshotTip }}</div>
+      <div class="shots-head">
+        <div>
+          <div class="block-title">应用截图</div>
+          <div class="size-tip">{{ screenshotTip }}</div>
+        </div>
+        <el-button
+          v-if="canUpload"
+          size="small"
+          type="primary"
+          plain
+          @click="triggerScreenshotUpload(screenshotSlots[0].key)"
+        >
+          一次选多张
+        </el-button>
+      </div>
       <div class="grid">
         <div v-for="slot in screenshotSlots" :key="slot.key" class="slot-card">
           <div class="slot-title">{{ slot.label }}</div>
@@ -68,7 +81,7 @@
             class="preview"
             :class="{ readonly: !canUpload }"
             :style="{ aspectRatio: slot.aspect }"
-            @click="canUpload && triggerUpload(slot.key)"
+            @click="canUpload && triggerScreenshotUpload(slot.key)"
           >
             <img v-if="assetMap[slot.key]" :src="previewUrl(assetMap[slot.key])" alt="" />
             <div v-else class="placeholder">
@@ -87,12 +100,19 @@
       </div>
     </div>
 
-    <input ref="fileInput" type="file" accept="image/*" hidden @change="onFileChange" />
+    <input
+      ref="fileInput"
+      type="file"
+      accept="image/*"
+      hidden
+      :multiple="pickMultiple"
+      @change="onFileChange"
+    />
   </div>
 </template>
 
 <script setup>
-import { computed, reactive, ref, watch } from 'vue'
+import { computed, nextTick, reactive, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
 import {
@@ -190,12 +210,12 @@ const bannerSlot = computed(() => (props.platform === 'android' ? androidBannerS
 
 const screenshotTip = computed(() => {
   if (props.platform === 'ios') {
-    return '须符合 App Store 6.9″ 官方尺寸：1320×2868 / 1290×2796 / 1260×2736（竖屏或对应横屏）'
+    return '可一次选多张，按点击槽位向后填入。须符合 App Store 6.9″ 官方尺寸：1320×2868 / 1290×2796 / 1260×2736（竖屏或对应横屏）'
   }
   if (props.platform === 'android') {
-    return 'Google Play 手机截图：9:16 或 16:9；边长 320–3840px；最短边 ≥1080；建议 1080×1920'
+    return '可一次选多张，按点击槽位向后填入。Google Play 手机截图：9:16 或 16:9；边长 320–3840px；最短边 ≥1080；建议 1080×1920'
   }
-  return '点击槽位上传，支持 jpg/png/webp'
+  return '点击槽位可一次选多张，按顺序填入空位，支持 jpg/png/webp'
 })
 
 const allSlotKeys = computed(() => {
@@ -215,6 +235,7 @@ function slotLabel(slot) {
 const assetMap = reactive({})
 const fileInput = ref(null)
 const pendingSlot = ref('')
+const pickMultiple = ref(false)
 
 function previewUrl(asset) {
   if (!asset?.url) return ''
@@ -241,9 +262,22 @@ async function load() {
   emit('change', list.length)
 }
 
-function triggerUpload(slot) {
+async function triggerUpload(slot, multiple = false) {
   pendingSlot.value = slot
+  pickMultiple.value = multiple
+  await nextTick()
   fileInput.value?.click()
+}
+
+function triggerScreenshotUpload(slot) {
+  return triggerUpload(slot, true)
+}
+
+function screenshotKeysFrom(startKey) {
+  const keys = screenshotSlots.value.map((s) => s.key)
+  const start = keys.indexOf(startKey)
+  if (start < 0) return []
+  return keys.slice(start)
 }
 
 function slotSpec(slotKey) {
@@ -342,25 +376,45 @@ async function validateImageSize(file, slotKey) {
   return true
 }
 
-async function onFileChange(e) {
-  const file = e.target.files?.[0]
-  if (!file || !pendingSlot.value) return
-  try {
-    if (!(await validateImageSize(file, pendingSlot.value))) return
-    if (props.projectId) {
-      if (!props.platform) {
-        ElMessage.error('缺少 platform 参数')
-        return
-      }
-      await uploadProjectStoreAsset(props.projectId, props.platform, pendingSlot.value, file)
-    } else {
-      await uploadReleaseStoreAsset(props.releaseId, pendingSlot.value, file)
+async function uploadOne(slot, file) {
+  if (props.projectId) {
+    if (!props.platform) {
+      throw new Error('缺少 platform 参数')
     }
-    ElMessage.success('上传成功')
+    await uploadProjectStoreAsset(props.projectId, props.platform, slot, file)
+  } else {
+    await uploadReleaseStoreAsset(props.releaseId, slot, file)
+  }
+}
+
+async function onFileChange(e) {
+  const files = [...(e.target.files || [])]
+  const startSlot = pendingSlot.value
+  e.target.value = ''
+  if (!files.length || !startSlot) return
+
+  const targets = pickMultiple.value
+    ? screenshotKeysFrom(startSlot).slice(0, files.length)
+    : [startSlot]
+  if (pickMultiple.value && files.length > targets.length) {
+    ElMessage.warning(`最多还能填 ${targets.length} 个槽位，已忽略多余文件`)
+  }
+
+  let ok = 0
+  try {
+    for (let i = 0; i < targets.length; i += 1) {
+      const slot = targets[i]
+      const file = files[i]
+      if (!(await validateImageSize(file, slot))) continue
+      await uploadOne(slot, file)
+      ok += 1
+    }
+    if (ok) ElMessage.success(ok === 1 ? '上传成功' : `已上传 ${ok} 张`)
   } catch (err) {
     ElMessage.error(err.message || '上传失败')
   } finally {
-    e.target.value = ''
+    pickMultiple.value = false
+    pendingSlot.value = ''
   }
   await load()
 }
@@ -417,6 +471,14 @@ watch(() => [props.projectId, props.releaseId, props.platform], load, { immediat
 .store-assets { width: 100%; }
 .block-title { font-size: 14px; font-weight: 600; color: #303133; margin-bottom: 4px; }
 .size-tip { font-size: 12px; color: #909399; margin-bottom: 10px; line-height: 1.5; }
+.shots-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+.shots-head .size-tip { margin-bottom: 0; }
 .logo-block { margin-bottom: 20px; }
 .logo-wrap { max-width: 160px; }
 .banner-block { margin-bottom: 20px; }
